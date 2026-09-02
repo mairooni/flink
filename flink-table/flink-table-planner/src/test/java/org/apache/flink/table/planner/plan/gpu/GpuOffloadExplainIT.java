@@ -81,15 +81,20 @@ class GpuOffloadExplainIT {
     }
 
     @Test
-    @DisplayName("an accepted query is shown as offloaded, with its subtree")
-    void acceptanceIsExplained() {
+    @DisplayName("EXPLAIN reports what happened, not merely what the gate wanted")
+    void selectionThatFellBackIsExplained() {
         tEnv.getConfig().set(GpuOffloadOptions.ENABLED, true);
         String plan = tEnv.explainSql(HEAVY);
 
         assertTrue(plan.contains("== GPU Offload =="), plan);
-        assertTrue(plan.contains("GPU"), plan);
-        assertTrue(plan.contains("clears floor"), plan);
         assertTrue(plan.contains("subtree 0"), plan);
+        // explainSql translates as well as plans, so the substitution attempt has already run by
+        // the time the section is rendered. With no provider installed the node was selected by the
+        // gate and then fell back, and the section says exactly that rather than claiming a GPU
+        // execution that did not happen. This assertion flips to "clears floor"/GPU once a provider
+        // ships in flink-gpu-runtime.
+        assertTrue(plan.contains("selected but fell back"), plan);
+        assertTrue(plan.contains("no GpuOperatorFactoryProvider on the classpath"), plan);
     }
 
     @Test

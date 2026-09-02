@@ -149,6 +149,14 @@ public final class GpuOffloadDecision {
         return verdict(total);
     }
 
+    /**
+     * Turns a selected verdict into a fallback one, keeping the cost so EXPLAIN still shows what
+     * the node was worth alongside why it did not run on the device.
+     */
+    public static Verdict fallback(Verdict selected, String reason) {
+        return new Verdict(false, selected.rowCost(), "selected but fell back: " + reason);
+    }
+
     private Verdict verdict(RowCost cost) {
         if (!cost.isEligible()) {
             return new Verdict(false, 0, "not expressible on device: " + cost.rejection());

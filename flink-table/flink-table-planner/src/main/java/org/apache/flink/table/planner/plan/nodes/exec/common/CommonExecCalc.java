@@ -20,7 +20,13 @@ package org.apache.flink.table.planner.plan.nodes.exec.common;
 
 import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.configuration.ReadableConfig;
+import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.planner.plan.gpu.GpuCalcMatcher;
+import org.apache.flink.table.planner.plan.gpu.GpuCalcSpec;
+import org.apache.flink.table.planner.plan.gpu.GpuOffloadAssignment;
+import org.apache.flink.table.planner.plan.gpu.GpuOffloadDecision;
+import org.apache.flink.table.planner.plan.gpu.GpuOperatorFactoryProvider;
 import org.apache.flink.table.planner.codegen.CalcCodeGenerator;
 import org.apache.flink.table.planner.codegen.CodeGeneratorContext;
 import org.apache.flink.table.planner.delegation.PlannerBase;
@@ -96,6 +102,18 @@ public abstract class CommonExecCalc extends ExecNodeBase<RowData>
                 new CodeGeneratorContext(config, planner.getFlinkContext().getClassLoader())
                         .setOperatorBaseClass(operatorBaseClass);
 
+        final StreamOperatorFactory<RowData> gpuOperator =
+                tryGpuOffload(planner, (RowType) getOutputType());
+        if (gpuOperator != null) {
+            return ExecNodeUtil.createOneInputTransformation(
+                    inputTransform,
+                    createTransformationMeta(CALC_TRANSFORMATION, config),
+                    gpuOperator,
+                    InternalTypeInfo.of(getOutputType()),
+                    inputTransform.getParallelism(),
+                    false);
+        }
+
         final CodeGenOperatorFactory<RowData> substituteStreamOperator =
                 CalcCodeGenerator.generateCalcOperator(
                         ctx,
@@ -112,5 +130,54 @@ public abstract class CommonExecCalc extends ExecNodeBase<RowData>
                 InternalTypeInfo.of(getOutputType()),
                 inputTransform.getParallelism(),
                 false);
+    }
+
+    /**
+     * Returns a GPU operator factory for this node, or null to fall through to code generation.
+     *
+     * <p>Three independent things must hold, and any of them failing is a normal outcome rather
+     * than an error: the offload processor must have selected this node, a provider must be on the
+     * classpath, and the runtime's kernel catalogue must have a match for the expressions
+     * (clearing the cost floor says an expression is worth offloading, not that a kernel exists for
+     * it).
+     *
+     * <p>Every fallback path is silent to the query but visible in EXPLAIN, so a plan that was
+     * expected to offload and did not can be diagnosed without attaching a debugger.
+     */
+    private @Nullable StreamOperatorFactory<RowData> tryGpuOffload(
+            PlannerBase planner, RowType outputType) {
+        GpuOffloadAssignment assignment = getGpuOffloadAssignment();
+        if (assignment == null || !assignment.isOffloaded()) {
+            return null;
+        }
+        Optional<GpuOperatorFactoryProvider> provider =
+                GpuOperatorFactoryProvider.find(planner.getFlinkContext().getClassLoader());
+        if (!provider.isPresent()) {
+            recordGpuFallback(assignment, "no GpuOperatorFactoryProvider on the classpath");
+            return null;
+        }
+        Optional<GpuCalcSpec> spec =
+                GpuCalcMatcher.match(
+                        projection, condition, outputType, assignment.verdict().rowCost());
+        if (!spec.isPresent()) {
+            recordGpuFallback(assignment, "no kernel in the catalogue matches these expressions");
+            return null;
+        }
+        Optional<StreamOperatorFactory<RowData>> factory =
+                provider.get().createCalcOperatorFactory(spec.get());
+        if (!factory.isPresent()) {
+            recordGpuFallback(
+                    assignment, provider.get().describe() + " declined " + spec.get());
+            return null;
+        }
+        return factory.get();
+    }
+
+    /** Rewrites the node's verdict so EXPLAIN reports why a selected node still ran on the CPU. */
+    private void recordGpuFallback(GpuOffloadAssignment assignment, String reason) {
+        setGpuOffloadAssignment(
+                new GpuOffloadAssignment(
+                        assignment.groupId(),
+                        GpuOffloadDecision.fallback(assignment.verdict(), reason)));
     }
 }
