@@ -26,6 +26,8 @@ import org.apache.flink.table.planner.delegation.PlannerBase;
 import org.apache.flink.table.planner.plan.fusion.OpFusionCodegenSpecGenerator;
 import org.apache.flink.table.planner.plan.fusion.generator.OneInputOpFusionCodegenSpecGenerator;
 import org.apache.flink.table.planner.plan.fusion.spec.CalcFusionCodegenSpec;
+import org.apache.flink.table.planner.plan.gpu.GpuCostEstimator;
+import org.apache.flink.table.planner.plan.gpu.RowCost;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNode;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeConfig;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeContext;
@@ -43,6 +45,7 @@ import org.apache.calcite.rex.RexNode;
 
 import javax.annotation.Nullable;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -97,6 +100,33 @@ public class BatchExecCalc extends CommonExecCalc implements BatchExecNode<RowDa
                 inputProperties,
                 outputType,
                 description);
+    }
+
+    /**
+     * A Calc is the natural first offload target: stateless, 1:1, no shuffle, no ordering
+     * dependence. Its per-record work is a pure function of one row, which is exactly a
+     * {@code @Parallel} loop body.
+     *
+     * <p>This says only that the shape is right. Whether these particular expressions are
+     * expressible on a device, and whether they do enough work to be worth moving, are answered by
+     * {@link #estimateRowCost()}.
+     */
+    @Override
+    public boolean supportGpuOffload() {
+        return true;
+    }
+
+    /**
+     * Costs the projection and the condition as one unit, because they execute as one kernel over
+     * the same staged buffer.
+     */
+    @Override
+    public RowCost estimateRowCost() {
+        List<RexNode> expressions = new ArrayList<>(projection);
+        if (condition != null) {
+            expressions.add(condition);
+        }
+        return GpuCostEstimator.estimateAll(expressions);
     }
 
     public boolean supportFusionCodegen() {
