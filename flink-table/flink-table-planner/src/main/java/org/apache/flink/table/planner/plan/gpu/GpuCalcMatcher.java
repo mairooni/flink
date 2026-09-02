@@ -61,17 +61,21 @@ public class GpuCalcMatcher {
             RowType outputType,
             int rowCost) {
 
-        // The kernel writes exactly one computed column; a pass-through key column alongside it is
-        // handled by the operator from the staging buffer without going near the device.
+        // The kernel writes exactly one computed column; pass-through columns alongside it are
+        // served by the operator from its staging buffer without going near the device.
         RexNode computed = null;
-        for (RexNode expr : projection) {
+        int[] layout = new int[projection.size()];
+        for (int i = 0; i < projection.size(); i++) {
+            RexNode expr = projection.get(i);
             if (expr instanceof RexInputRef) {
+                layout[i] = ((RexInputRef) expr).getIndex();
                 continue;
             }
             if (computed != null) {
                 return Optional.empty();
             }
             computed = expr;
+            layout[i] = GpuCalcSpec.COMPUTED;
         }
         if (computed == null) {
             return Optional.empty();
@@ -91,7 +95,13 @@ public class GpuCalcMatcher {
         }
         return Optional.of(
                 new GpuCalcSpec(
-                        scale.fieldIndex, scale.mul, scale.add, threshold, outputType, rowCost));
+                        scale.fieldIndex,
+                        scale.mul,
+                        scale.add,
+                        threshold,
+                        outputType,
+                        layout,
+                        rowCost));
     }
 
     private static final class Scale {

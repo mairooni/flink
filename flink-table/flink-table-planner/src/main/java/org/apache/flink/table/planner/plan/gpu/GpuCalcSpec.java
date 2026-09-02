@@ -22,6 +22,8 @@ import org.apache.flink.table.types.logical.RowType;
 
 import javax.annotation.Nullable;
 
+import java.io.Serializable;
+
 /**
  * What the runtime needs in order to execute one offloaded Calc, expressed without any reference to
  * Calcite.
@@ -32,18 +34,27 @@ import javax.annotation.Nullable;
  * planner therefore matches the expression tree against the kernel catalogue and passes a
  * descriptor: which kernel, over which column, with which scalar constants.
  *
+ * <p>Serializable because it travels inside the operator into the JobGraph: the planner builds it
+ * on the client and the TaskManager reconstructs the operator from it.
+ *
  * <p>This is the narrow form for the one kernel shape that exists today,
  * {@code out = col * mul + add} with optional selection {@code col > threshold}. Widening it is the
  * point at which either the catalogue grows or the planner starts generating device code, which is
  * the fork in the road recorded as an open question in the design document.
  */
-public final class GpuCalcSpec {
+public final class GpuCalcSpec implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+
+    /** Marks the kernel-produced column in {@link #outputLayout()}. */
+    public static final int COMPUTED = -1;
 
     private final int inputFieldIndex;
     private final double mul;
     private final double add;
     private final @Nullable Double threshold;
     private final RowType outputType;
+    private final int[] outputLayout;
     private final int rowCost;
 
     public GpuCalcSpec(
@@ -52,12 +63,14 @@ public final class GpuCalcSpec {
             double add,
             @Nullable Double threshold,
             RowType outputType,
+            int[] outputLayout,
             int rowCost) {
         this.inputFieldIndex = inputFieldIndex;
         this.mul = mul;
         this.add = add;
         this.threshold = threshold;
         this.outputType = outputType;
+        this.outputLayout = outputLayout;
         this.rowCost = rowCost;
     }
 
@@ -81,6 +94,18 @@ public final class GpuCalcSpec {
 
     public RowType outputType() {
         return outputType;
+    }
+
+    /**
+     * For each output field, the input field it is copied from, or {@link #COMPUTED} for the one
+     * the kernel produces.
+     *
+     * <p>Pass-through columns never reach the device. They are staged host-side alongside the
+     * kernel's input and emitted straight from that buffer, which is both cheaper and the only way
+     * to carry a type the kernel has no representation for.
+     */
+    public int[] outputLayout() {
+        return outputLayout;
     }
 
     /** Carried through so the runtime can report it alongside the measured breakdown. */

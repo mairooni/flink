@@ -37,6 +37,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -75,6 +76,7 @@ class GpuSubstitutionIT {
         assertEquals(2.0, spec.get().mul());
         assertEquals(1.0, spec.get().add());
         assertEquals(0.5, spec.get().threshold());
+        assertArrayEquals(new int[] {0, GpuCalcSpec.COMPUTED}, spec.get().outputLayout());
     }
 
     @Test
