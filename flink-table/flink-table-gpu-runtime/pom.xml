@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Licensed to the Apache Software Foundation (ASF) under one
+or more contributor license agreements.  See the NOTICE file
+distributed with this work for additional information
+regarding copyright ownership.  The ASF licenses this file
+to you under the Apache License, Version 2.0 (the
+"License"); you may not use this file except in compliance
+with the License.  You may obtain a copy of the License at
+
+  http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing,
+software distributed under the License is distributed on an
+"AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+KIND, either express or implied.  See the License for the
+specific language governing permissions and limitations
+under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<parent>
+		<groupId>org.apache.flink</groupId>
+		<artifactId>flink-table</artifactId>
+		<version>2.3.0</version>
+	</parent>
+
+	<artifactId>flink-table-gpu-runtime</artifactId>
+	<name>Flink : Table : GPU runtime</name>
+
+	<description>
+		Query-independent runtime for GPU offload of Flink SQL operators: kernels, gather
+		strategies, the staging operator, and the provider the planner discovers by ServiceLoader.
+
+		Not part of the default build. It depends on TornadoVM, which is not published to Maven
+		Central and must be installed locally from a TornadoVM distribution, so building it
+		unconditionally would break a clean checkout. Activate with -Pgpu.
+	</description>
+
+	<properties>
+		<tornado.version>5.2.1-jdk21-dev</tornado.version>
+	</properties>
+
+	<dependencies>
+		<dependency>
+			<groupId>org.apache.flink</groupId>
+			<artifactId>flink-table-common</artifactId>
+			<version>${project.version}</version>
+			<scope>provided</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.flink</groupId>
+			<artifactId>flink-table-runtime</artifactId>
+			<version>${project.version}</version>
+			<scope>provided</scope>
+		</dependency>
+		<!--
+			For the GpuOperatorFactoryProvider SPI only. A reactor dependency, so no local install
+			of the planner is needed - which is the main practical gain from living in the tree.
+		-->
+		<dependency>
+			<groupId>org.apache.flink</groupId>
+			<artifactId>flink-table-planner_${scala.binary.version}</artifactId>
+			<version>${project.version}</version>
+			<scope>provided</scope>
+		</dependency>
+
+		<!--
+			TornadoVM. Install from a TornadoVM distribution before building this module:
+
+			  D=$TORNADO_SDK/share/java/tornado
+			  for a in tornado-api tornado-annotation; do
+			    mvn install:install-file -Dfile=$D/$a-5.2.1-jdk21-dev.jar \
+			      -DgroupId=uk.ac.manchester.tornado -DartifactId=$a \
+			      -Dversion=5.2.1-jdk21-dev -Dpackaging=jar
+			  done
+		-->
+		<dependency>
+			<groupId>uk.ac.manchester.tornado</groupId>
+			<artifactId>tornado-api</artifactId>
+			<version>${tornado.version}</version>
+			<scope>provided</scope>
+		</dependency>
+		<dependency>
+			<groupId>uk.ac.manchester.tornado</groupId>
+			<artifactId>tornado-annotation</artifactId>
+			<version>${tornado.version}</version>
+			<scope>provided</scope>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<configuration>
+					<!--
+						Overrides the repository-wide source level 11. TornadoVM's off-heap array
+						types are built on java.lang.foreign, a preview API on JDK 21, so this
+						module cannot compile at the level the rest of the project uses.
+					-->
+					<!--
+						source/target rather than release: the parent supplies add-exports
+						compiler arguments, which javac rejects alongside the release flag.
+					-->
+					<source>21</source>
+					<target>21</target>
+					<compilerArgs combine.children="append">
+						<arg>--enable-preview</arg>
+					</compilerArgs>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+</project>
