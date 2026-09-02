@@ -41,7 +41,7 @@ under the License.
 	</description>
 
 	<properties>
-		<tornado.version>5.2.1-jdk21-dev</tornado.version>
+		<tornado.version>6.0.1-dev</tornado.version>
 	</properties>
 
 	<dependencies>
@@ -63,7 +63,14 @@ under the License.
 			<scope>provided</scope>
 		</dependency>
 		<!--
-			TornadoVM. Install from a TornadoVM distribution before building this module:
+			TornadoVM. Install from a TornadoVM distribution before building this module.
+
+			Changing this version requires a clean build of this module, not an incremental one.
+			TornadoVM resolves a kernel from its method reference's SerializedLambda, so the
+			writeReplace() that makes that possible is emitted into the calling class at compile
+			time against a specific tornado-api. Maven will not recompile unchanged sources for a
+			dependency version bump, and the stale classes then fail at run time with
+			"Kernel entry ... has no writeReplace()".
 
 			  D=$TORNADO_SDK/share/java/tornado
 			  for a in tornado-api tornado-annotation; do

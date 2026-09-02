@@ -25,13 +25,18 @@ Not in the default build, because TornadoVM is not published to Maven Central. I
 ```bash
 D=$TORNADO_SDK/share/java/tornado
 for a in tornado-api tornado-annotation; do
-  mvn install:install-file -Dfile=$D/$a-5.2.1-jdk21-dev.jar \
+  mvn install:install-file -Dfile=$D/$a-6.0.1-dev.jar \
     -DgroupId=uk.ac.manchester.tornado -DartifactId=$a \
-    -Dversion=5.2.1-jdk21-dev -Dpackaging=jar
+    -Dversion=6.0.1-dev -Dpackaging=jar
 done
 
 mvn -Pgpu -pl flink-table/flink-table-gpu-runtime -am -DskipTests install
 ```
+
+Use `clean install` when changing the TornadoVM version. The `writeReplace()` that lets TornadoVM
+resolve a kernel from its method reference is emitted at compile time against a specific
+`tornado-api`; Maven does not recompile unchanged sources for a version bump, and the stale classes
+fail at run time with `Kernel entry ... has no writeReplace()`.
 
 This module compiles at Java 21 with `--enable-preview`, overriding the repository-wide source
 level 11: TornadoVM's off-heap array types are built on `java.lang.foreign`, a preview API on 21.
