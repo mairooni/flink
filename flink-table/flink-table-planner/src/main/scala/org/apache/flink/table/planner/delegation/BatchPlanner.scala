@@ -31,6 +31,7 @@ import org.apache.flink.table.planner.plan.`trait`.FlinkRelDistributionTraitDef
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeGraph
 import org.apache.flink.table.planner.plan.nodes.exec.batch.BatchExecNode
 import org.apache.flink.table.planner.plan.nodes.exec.processor.{AdaptiveJoinProcessor, DeadlockBreakupProcessor, DynamicFilteringDependencyProcessor, ExecNodeGraphProcessor, ForwardHashExchangeProcessor, GpuOffloadProcessor, MultipleInputNodeCreationProcessor}
+import org.apache.flink.table.planner.plan.gpu.{GpuOffloadExplain, GpuOffloadOptions}
 import org.apache.flink.table.planner.plan.nodes.exec.utils.ExecNodePlanDumper
 import org.apache.flink.table.planner.plan.optimize.{BatchCommonSubGraphBasedOptimizer, Optimizer}
 import org.apache.flink.table.planner.plan.utils.FlinkRelOptUtil
@@ -180,6 +181,19 @@ class BatchPlanner(
     sb.append("== Optimized Execution Plan ==")
     sb.append(System.lineSeparator)
     sb.append(ExecNodePlanDumper.dagToString(execGraph))
+
+    // Only when the feature is on: the processor annotates without changing the plan, so an
+    // offloaded and a rejected plan are otherwise indistinguishable in EXPLAIN.
+    if (getTableConfig.get(GpuOffloadOptions.ENABLED)) {
+      val offload = GpuOffloadExplain.format(execGraph)
+      if (offload.nonEmpty) {
+        sb.append(System.lineSeparator)
+        sb.append(System.lineSeparator)
+        sb.append("== GPU Offload ==")
+        sb.append(System.lineSeparator)
+        sb.append(offload)
+      }
+    }
 
     if (extraDetails.contains(ExplainDetail.JSON_EXECUTION_PLAN)) {
       sb.append(System.lineSeparator)
