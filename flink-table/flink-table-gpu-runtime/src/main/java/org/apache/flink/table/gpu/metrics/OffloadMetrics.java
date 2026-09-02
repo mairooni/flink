@@ -15,6 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.flink.table.gpu.metrics;
 
 import uk.ac.manchester.tornado.api.TornadoProfilerResult;
@@ -52,7 +53,11 @@ public final class OffloadMetrics {
 
     /** Records one batch. {@code result} may be null when the profiler is disabled. */
     public void recordBatch(
-            int rows, int emitted, long gather, long executeWall, long drain,
+            int rows,
+            int emitted,
+            long gather,
+            long executeWall,
+            long drain,
             TornadoProfilerResult result) {
         batches++;
         rowsIn += rows;
@@ -70,18 +75,53 @@ public final class OffloadMetrics {
         }
     }
 
-    public long getBatches() { return batches; }
-    public long getRowsIn() { return rowsIn; }
-    public long getRowsOut() { return rowsOut; }
-    public long getGatherNanos() { return gatherNanos; }
-    public long getDrainNanos() { return drainNanos; }
-    public long getExecuteWallNanos() { return executeWallNanos; }
-    public long getCopyInNanos() { return copyInNanos; }
-    public long getKernelNanos() { return kernelNanos; }
-    public long getCopyOutNanos() { return copyOutNanos; }
-    public long getCompileNanos() { return compileNanos; }
-    public long getBytesCopyIn() { return bytesCopyIn; }
-    public long getBytesCopyOut() { return bytesCopyOut; }
+    public long getBatches() {
+        return batches;
+    }
+
+    public long getRowsIn() {
+        return rowsIn;
+    }
+
+    public long getRowsOut() {
+        return rowsOut;
+    }
+
+    public long getGatherNanos() {
+        return gatherNanos;
+    }
+
+    public long getDrainNanos() {
+        return drainNanos;
+    }
+
+    public long getExecuteWallNanos() {
+        return executeWallNanos;
+    }
+
+    public long getCopyInNanos() {
+        return copyInNanos;
+    }
+
+    public long getKernelNanos() {
+        return kernelNanos;
+    }
+
+    public long getCopyOutNanos() {
+        return copyOutNanos;
+    }
+
+    public long getCompileNanos() {
+        return compileNanos;
+    }
+
+    public long getBytesCopyIn() {
+        return bytesCopyIn;
+    }
+
+    public long getBytesCopyOut() {
+        return bytesCopyOut;
+    }
 
     /** Sum of the four segments the breakdown is meant to attribute. */
     public long getAttributedNanos() {
@@ -97,8 +137,10 @@ public final class OffloadMetrics {
         long total = Math.max(1, getAttributedNanos());
         StringBuilder sb = new StringBuilder();
         sb.append(String.format("%n=== %s ===%n", label));
-        sb.append(String.format("batches=%d  rows_in=%d  rows_out=%d (%.1f%% selectivity)%n",
-                batches, rowsIn, rowsOut, rowsIn == 0 ? 0.0 : 100.0 * rowsOut / rowsIn));
+        sb.append(
+                String.format(
+                        "batches=%d  rows_in=%d  rows_out=%d (%.1f%% selectivity)%n",
+                        batches, rowsIn, rowsOut, rowsIn == 0 ? 0.0 : 100.0 * rowsOut / rowsIn));
         sb.append(String.format("%-12s %12s %8s%n", "segment", "ms", "share"));
         sb.append(row("gather", gatherNanos, total));
         sb.append(row("copy-in", copyInNanos, total));
@@ -106,12 +148,18 @@ public final class OffloadMetrics {
         sb.append(row("copy-out", copyOutNanos, total));
         sb.append(row("drain", drainNanos, total));
         sb.append(String.format("%-12s %12.3f%n", "attributed", total / 1e6));
-        sb.append(String.format("%-12s %12.3f   (execute() wall, incl. dispatch)%n",
-                "execute", executeWallNanos / 1e6));
-        sb.append(String.format("%-12s %12.3f   (once per task, not per batch)%n",
-                "compile", compileNanos / 1e6));
-        sb.append(String.format("bytes in=%.2f MiB  out=%.2f MiB%n",
-                bytesCopyIn / 1048576.0, bytesCopyOut / 1048576.0));
+        sb.append(
+                String.format(
+                        "%-12s %12.3f   (execute() wall, incl. dispatch)%n",
+                        "execute", executeWallNanos / 1e6));
+        sb.append(
+                String.format(
+                        "%-12s %12.3f   (once per task, not per batch)%n",
+                        "compile", compileNanos / 1e6));
+        sb.append(
+                String.format(
+                        "bytes in=%.2f MiB  out=%.2f MiB%n",
+                        bytesCopyIn / 1048576.0, bytesCopyOut / 1048576.0));
         return sb.toString();
     }
 

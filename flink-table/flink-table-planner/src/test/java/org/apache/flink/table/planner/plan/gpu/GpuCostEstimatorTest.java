@@ -15,6 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.flink.table.planner.plan.gpu;
 
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
@@ -24,7 +25,6 @@ import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.type.SqlTypeName;
-
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -61,8 +61,11 @@ class GpuCostEstimatorTest {
     void targetQueryIsCheap() {
         RexNode val = col(SqlTypeName.DOUBLE, 1);
         // val * 2.0 + 1.0
-        RexNode projection = rex.makeCall(SqlStdOperatorTable.PLUS,
-                rex.makeCall(SqlStdOperatorTable.MULTIPLY, val, lit(2.0)), lit(1.0));
+        RexNode projection =
+                rex.makeCall(
+                        SqlStdOperatorTable.PLUS,
+                        rex.makeCall(SqlStdOperatorTable.MULTIPLY, val, lit(2.0)),
+                        lit(1.0));
         // val > 0.5
         RexNode condition = rex.makeCall(SqlStdOperatorTable.GREATER_THAN, val, lit(0.5));
 
@@ -74,7 +77,8 @@ class GpuCostEstimatorTest {
         // Measured at 0.54x against CPU. Whatever the calibrated floor turns out to be, it is far
         // above this; the test asserts the estimator puts the query in the "obviously not worth it"
         // regime rather than pinning a specific floor.
-        assertTrue(cost.weight() < 24,
+        assertTrue(
+                cost.weight() < 24,
                 "target query must land below the lowest measured losing intensity");
     }
 
@@ -83,12 +87,16 @@ class GpuCostEstimatorTest {
     void heavyExpressionIsExpensive() {
         RexNode val = col(SqlTypeName.DOUBLE, 1);
         // EXP(val) * LN(val) + SQRT(val) / POWER(val, 2.0)
-        RexNode expTerm = rex.makeCall(SqlStdOperatorTable.MULTIPLY,
-                rex.makeCall(SqlStdOperatorTable.EXP, val),
-                rex.makeCall(SqlStdOperatorTable.LN, val));
-        RexNode sqrtTerm = rex.makeCall(SqlStdOperatorTable.DIVIDE,
-                rex.makeCall(SqlStdOperatorTable.SQRT, val),
-                rex.makeCall(SqlStdOperatorTable.POWER, val, lit(2.0)));
+        RexNode expTerm =
+                rex.makeCall(
+                        SqlStdOperatorTable.MULTIPLY,
+                        rex.makeCall(SqlStdOperatorTable.EXP, val),
+                        rex.makeCall(SqlStdOperatorTable.LN, val));
+        RexNode sqrtTerm =
+                rex.makeCall(
+                        SqlStdOperatorTable.DIVIDE,
+                        rex.makeCall(SqlStdOperatorTable.SQRT, val),
+                        rex.makeCall(SqlStdOperatorTable.POWER, val, lit(2.0)));
         RexNode projection = rex.makeCall(SqlStdOperatorTable.PLUS, expTerm, sqrtTerm);
 
         RowCost cost = GpuCostEstimator.estimateAll(List.of(projection));
@@ -96,8 +104,7 @@ class GpuCostEstimatorTest {
         assertTrue(cost.isEligible(), cost::rejection);
         // EXP 20 + LN 20 + TIMES 1 + SQRT 8 + POWER 24 + DIVIDE 4 + PLUS 1
         assertEquals(78, cost.weight());
-        assertTrue(cost.weight() > 24,
-                "must clear the low end of the measured crossover band");
+        assertTrue(cost.weight() > 24, "must clear the low end of the measured crossover band");
     }
 
     @Test

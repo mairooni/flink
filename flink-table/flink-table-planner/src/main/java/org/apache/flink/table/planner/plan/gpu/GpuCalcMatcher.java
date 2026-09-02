@@ -18,6 +18,7 @@
 
 package org.apache.flink.table.planner.plan.gpu;
 
+import org.apache.flink.table.runtime.gpu.GpuCalcSpec;
 import org.apache.flink.table.types.logical.RowType;
 
 import org.apache.calcite.rex.RexCall;
@@ -54,12 +55,14 @@ public class GpuCalcMatcher {
      * @param condition the Calc's condition, or null
      * @param outputType the Calc's output row type
      * @param rowCost the cost the gate already computed, carried into the spec
+     * @param batchSize rows to stage per kernel launch
      */
     public static Optional<GpuCalcSpec> match(
             List<RexNode> projection,
             @Nullable RexNode condition,
             RowType outputType,
-            int rowCost) {
+            int rowCost,
+            int batchSize) {
 
         // The kernel writes exactly one computed column; pass-through columns alongside it are
         // served by the operator from its staging buffer without going near the device.
@@ -101,7 +104,8 @@ public class GpuCalcMatcher {
                         threshold,
                         outputType,
                         layout,
-                        rowCost));
+                        rowCost,
+                        batchSize));
     }
 
     private static final class Scale {

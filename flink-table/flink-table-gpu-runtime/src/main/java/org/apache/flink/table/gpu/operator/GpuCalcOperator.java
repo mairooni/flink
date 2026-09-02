@@ -15,6 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.flink.table.gpu.operator;
 
 import org.apache.flink.streaming.api.operators.AbstractStreamOperator;
@@ -25,7 +26,7 @@ import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.gpu.gather.RowGather;
 import org.apache.flink.table.gpu.metrics.OffloadMetrics;
-import org.apache.flink.table.planner.plan.gpu.GpuCalcSpec;
+import org.apache.flink.table.runtime.gpu.GpuCalcSpec;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.LogicalTypeRoot;
 
@@ -107,8 +108,12 @@ public class GpuCalcOperator extends AbstractStreamOperator<RowData>
             // The concrete RowData implementation is not knowable at plan time -- the planner
             // declares only InternalTypeInfo<RowData> and the connector picks the class -- so the
             // gather strategy is chosen from the first record actually seen.
-            gather = RowGather.forDouble(row, spec.inputFieldIndex(), engine.inputColumn(),
-                    engine.inputSegment());
+            gather =
+                    RowGather.forDouble(
+                            row,
+                            spec.inputFieldIndex(),
+                            engine.inputColumn(),
+                            engine.inputSegment());
         }
         gather.accept(row, buffered);
         for (PassThroughBuffer buffer : passThrough) {
@@ -234,7 +239,9 @@ public class GpuCalcOperator extends AbstractStreamOperator<RowData>
                 };
             }
             throw new UnsupportedOperationException(
-                    "no pass-through buffer for " + type + "; the matcher should have refused this "
+                    "no pass-through buffer for "
+                            + type
+                            + "; the matcher should have refused this "
                             + "Calc before the operator was built");
         }
     }

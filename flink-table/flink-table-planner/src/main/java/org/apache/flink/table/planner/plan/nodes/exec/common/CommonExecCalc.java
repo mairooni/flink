@@ -22,14 +22,13 @@ import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
 import org.apache.flink.table.data.RowData;
-import org.apache.flink.table.planner.plan.gpu.GpuCalcMatcher;
-import org.apache.flink.table.planner.plan.gpu.GpuCalcSpec;
-import org.apache.flink.table.planner.plan.gpu.GpuOffloadAssignment;
-import org.apache.flink.table.planner.plan.gpu.GpuOffloadDecision;
-import org.apache.flink.table.planner.plan.gpu.GpuOperatorFactoryProvider;
 import org.apache.flink.table.planner.codegen.CalcCodeGenerator;
 import org.apache.flink.table.planner.codegen.CodeGeneratorContext;
 import org.apache.flink.table.planner.delegation.PlannerBase;
+import org.apache.flink.table.planner.plan.gpu.GpuCalcMatcher;
+import org.apache.flink.table.planner.plan.gpu.GpuOffloadAssignment;
+import org.apache.flink.table.planner.plan.gpu.GpuOffloadDecision;
+import org.apache.flink.table.planner.plan.gpu.GpuOffloadOptions;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecEdge;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeBase;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeConfig;
@@ -38,6 +37,8 @@ import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 import org.apache.flink.table.planner.plan.nodes.exec.SingleTransformationTranslator;
 import org.apache.flink.table.planner.plan.nodes.exec.utils.ExecNodeUtil;
 import org.apache.flink.table.planner.utils.JavaScalaConversionUtil;
+import org.apache.flink.table.runtime.gpu.GpuCalcSpec;
+import org.apache.flink.table.runtime.gpu.GpuOperatorFactoryProvider;
 import org.apache.flink.table.runtime.operators.CodeGenOperatorFactory;
 import org.apache.flink.table.runtime.typeutils.InternalTypeInfo;
 import org.apache.flink.table.types.logical.RowType;
@@ -137,9 +138,8 @@ public abstract class CommonExecCalc extends ExecNodeBase<RowData>
      *
      * <p>Three independent things must hold, and any of them failing is a normal outcome rather
      * than an error: the offload processor must have selected this node, a provider must be on the
-     * classpath, and the runtime's kernel catalogue must have a match for the expressions
-     * (clearing the cost floor says an expression is worth offloading, not that a kernel exists for
-     * it).
+     * classpath, and the runtime's kernel catalogue must have a match for the expressions (clearing
+     * the cost floor says an expression is worth offloading, not that a kernel exists for it).
      *
      * <p>Every fallback path is silent to the query but visible in EXPLAIN, so a plan that was
      * expected to offload and did not can be diagnosed without attaching a debugger.
@@ -158,7 +158,11 @@ public abstract class CommonExecCalc extends ExecNodeBase<RowData>
         }
         Optional<GpuCalcSpec> spec =
                 GpuCalcMatcher.match(
-                        projection, condition, outputType, assignment.verdict().rowCost());
+                        projection,
+                        condition,
+                        outputType,
+                        assignment.verdict().rowCost(),
+                        planner.getTableConfig().get(GpuOffloadOptions.BATCH_SIZE));
         if (!spec.isPresent()) {
             recordGpuFallback(assignment, "no kernel in the catalogue matches these expressions");
             return null;
@@ -166,8 +170,7 @@ public abstract class CommonExecCalc extends ExecNodeBase<RowData>
         Optional<StreamOperatorFactory<RowData>> factory =
                 provider.get().createCalcOperatorFactory(spec.get());
         if (!factory.isPresent()) {
-            recordGpuFallback(
-                    assignment, provider.get().describe() + " declined " + spec.get());
+            recordGpuFallback(assignment, provider.get().describe() + " declined " + spec.get());
             return null;
         }
         return factory.get();

@@ -15,14 +15,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.flink.table.gpu.gather;
 
 import org.apache.flink.table.data.RowData;
 
 /**
- * Tier 4 — the fallback. Reads through the {@link RowData} interface, which for
- * {@code GenericRowData} and {@code BoxedWrapperRowData} means an object dereference plus an unbox
- * per field.
+ * Tier 4 — the fallback. Reads through the {@link RowData} interface, which for {@code
+ * GenericRowData} and {@code BoxedWrapperRowData} means an object dereference plus an unbox per
+ * field.
  *
  * <p>Correct for every implementation, and expected to be the slowest by a wide margin. It exists
  * so the operator is never wrong, not because it is expected to pay: the planner-side predicate

@@ -15,14 +15,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.flink.table.gpu.provider;
 
 import org.apache.flink.streaming.api.operators.SimpleOperatorFactory;
 import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.gpu.operator.GpuCalcOperator;
-import org.apache.flink.table.planner.plan.gpu.GpuCalcSpec;
-import org.apache.flink.table.planner.plan.gpu.GpuOperatorFactoryProvider;
+import org.apache.flink.table.runtime.gpu.GpuCalcSpec;
+import org.apache.flink.table.runtime.gpu.GpuOperatorFactoryProvider;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.LogicalTypeRoot;
 
@@ -46,31 +47,19 @@ import java.util.Optional;
 public class TornadoGpuOperatorFactoryProvider implements GpuOperatorFactoryProvider {
 
     /**
-     * Rows staged before a kernel launch.
-     *
-     * <p>Measured across 64K to 4M: device work stays around a tenth of the total throughout, and
-     * larger batches mainly cut TornadoVM dispatch overhead (51 ms to 3.6 ms over 8M rows). 256K is
-     * comfortably past the point where dispatch stops dominating without holding an unreasonable
-     * amount of memory per subtask.
-     */
-    private static final int BATCH_SIZE =
-            Integer.getInteger("flink.gpu.offload.batch-size", 262_144);
-
-    /**
      * Whether to collect the gather / copy-in / kernel / copy-out breakdown.
      *
-     * <p>On by default while the project is establishing where time goes. It costs a profiler
-     * query per batch, not per record.
+     * <p>On while the project is establishing where time goes. It costs one profiler query per
+     * batch, not per record.
      */
-    private static final boolean PROFILE =
-            Boolean.parseBoolean(System.getProperty("flink.gpu.offload.profile", "true"));
+    private static final boolean PROFILE = true;
 
     @Override
     public Optional<StreamOperatorFactory<RowData>> createCalcOperatorFactory(GpuCalcSpec spec) {
         if (!canStageOutput(spec)) {
             return Optional.empty();
         }
-        GpuCalcOperator operator = new GpuCalcOperator(spec, BATCH_SIZE, PROFILE);
+        GpuCalcOperator operator = new GpuCalcOperator(spec, spec.batchSize(), PROFILE);
         return Optional.of(SimpleOperatorFactory.of(operator));
     }
 
@@ -101,6 +90,6 @@ public class TornadoGpuOperatorFactoryProvider implements GpuOperatorFactoryProv
 
     @Override
     public String describe() {
-        return "TornadoVM (batch=" + BATCH_SIZE + ", profile=" + PROFILE + ")";
+        return "TornadoVM (profile=" + PROFILE + ")";
     }
 }

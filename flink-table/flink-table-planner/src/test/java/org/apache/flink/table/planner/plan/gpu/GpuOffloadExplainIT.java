@@ -51,7 +51,8 @@ class GpuOffloadExplainIT {
     @DisplayName("no section at all when the feature is off")
     void silentWhenDisabled() {
         String plan = tEnv.explainSql(HEAVY);
-        assertFalse(plan.contains("GPU Offload"),
+        assertFalse(
+                plan.contains("GPU Offload"),
                 "a feature that is off must not change EXPLAIN output:\n" + plan);
     }
 

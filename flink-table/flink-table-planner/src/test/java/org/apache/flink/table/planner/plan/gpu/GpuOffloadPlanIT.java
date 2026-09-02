@@ -46,9 +46,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>The unit tests build {@code RexNode}s with a {@code RexBuilder}. This one plans real SQL and
  * costs the {@link BatchExecCalc} the optimizer emitted, which is the only way to catch the two
- * things a hand-built tree cannot: that expressions arrive expanded rather than as
- * {@code RexLocalRef} program form, and that constant folding has already happened by the time the
- * gate runs.
+ * things a hand-built tree cannot: that expressions arrive expanded rather than as {@code
+ * RexLocalRef} program form, and that constant folding has already happened by the time the gate
+ * runs.
  */
 class GpuOffloadPlanIT {
 
@@ -61,8 +61,10 @@ class GpuOffloadPlanIT {
         tEnv.executeSql(
                 "CREATE TABLE t (id BIGINT, val DOUBLE) WITH ("
                         + "'connector' = 'datagen', 'number-of-rows' = '10')");
-        planner = (PlannerBase) ((org.apache.flink.table.api.internal.TableEnvironmentImpl) tEnv)
-                .getPlanner();
+        planner =
+                (PlannerBase)
+                        ((org.apache.flink.table.api.internal.TableEnvironmentImpl) tEnv)
+                                .getPlanner();
     }
 
     /** Plans {@code sql} and returns the cost of its single Calc node. */
@@ -70,7 +72,8 @@ class GpuOffloadPlanIT {
         Table table = tEnv.sqlQuery(sql);
         RelNode optimized = planner.optimize(TableTestUtil.toRelNode(table));
         ExecNodeGraph graph =
-                planner.translateToExecNodeGraph(toScala(Collections.singletonList(optimized)), false);
+                planner.translateToExecNodeGraph(
+                        toScala(Collections.singletonList(optimized)), false);
 
         List<BatchExecCalc> calcs = new ArrayList<>();
         collectCalcs(graph.getRootNodes(), calcs);
@@ -110,9 +113,10 @@ class GpuOffloadPlanIT {
     @Test
     @DisplayName("a transcendental-heavy query clears the floor")
     void heavyQueryIsAccepted() {
-        RowCost cost = costOfCalc(
-                "SELECT id, EXP(val) * LN(val) + SIN(val) * COS(val) + POWER(val, 3.0) AS h "
-                        + "FROM t WHERE val > 0.5");
+        RowCost cost =
+                costOfCalc(
+                        "SELECT id, EXP(val) * LN(val) + SIN(val) * COS(val) + POWER(val, 3.0) AS h "
+                                + "FROM t WHERE val > 0.5");
 
         assertTrue(cost.isEligible(), cost::rejection);
         GpuOffloadDecision.Verdict v =

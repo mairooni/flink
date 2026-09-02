@@ -52,5 +52,17 @@ public class GpuOffloadOptions {
                                     + "intensity sweep in the offload harness rather than assuming "
                                     + "the default transfers.");
 
+    public static final ConfigOption<Integer> BATCH_SIZE =
+            ConfigOptions.key("table.exec.gpu-offload.batch-size")
+                    .intType()
+                    .defaultValue(262_144)
+                    .withDescription(
+                            "Rows staged before a kernel launch. Batching is not optional -- a "
+                                    + "device kernel needs a sized contiguous buffer -- so this "
+                                    + "trades memory per subtask against dispatch overhead. "
+                                    + "Measured from 64K to 4M, device work stays near a tenth of "
+                                    + "the total throughout and larger batches mainly reduce "
+                                    + "TornadoVM dispatch cost.");
+
     private GpuOffloadOptions() {}
 }

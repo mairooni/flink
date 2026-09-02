@@ -93,8 +93,10 @@ public class GpuOffloadProcessor implements ExecNodeGraphProcessor {
             if (!cost.isEligible()) {
                 // Record the reason so EXPLAIN can say why, but do not group an ineligible node:
                 // one such member would poison an otherwise viable subtree.
-                assign(node, new GpuOffloadAssignment(
-                        NO_GROUP, decision.forSubtree(Collections.singletonList(cost))));
+                assign(
+                        node,
+                        new GpuOffloadAssignment(
+                                NO_GROUP, decision.forSubtree(Collections.singletonList(cost))));
                 continue;
             }
             costs.put(node, cost);

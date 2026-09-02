@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.table.planner.plan.gpu;
+package org.apache.flink.table.runtime.gpu;
 
 import org.apache.flink.table.types.logical.RowType;
 
@@ -28,8 +28,8 @@ import java.io.Serializable;
  * What the runtime needs in order to execute one offloaded Calc, expressed without any reference to
  * Calcite.
  *
- * <p>The runtime library holds a fixed set of javac-compiled kernels — it cannot be handed a
- * {@code RexNode} tree and asked to interpret it, because TornadoVM resolves a kernel from a method
+ * <p>The runtime library holds a fixed set of javac-compiled kernels — it cannot be handed a {@code
+ * RexNode} tree and asked to interpret it, because TornadoVM resolves a kernel from a method
  * reference's {@code SerializedLambda} and so the method must exist before the query does. The
  * planner therefore matches the expression tree against the kernel catalogue and passes a
  * descriptor: which kernel, over which column, with which scalar constants.
@@ -37,10 +37,10 @@ import java.io.Serializable;
  * <p>Serializable because it travels inside the operator into the JobGraph: the planner builds it
  * on the client and the TaskManager reconstructs the operator from it.
  *
- * <p>This is the narrow form for the one kernel shape that exists today,
- * {@code out = col * mul + add} with optional selection {@code col > threshold}. Widening it is the
- * point at which either the catalogue grows or the planner starts generating device code, which is
- * the fork in the road recorded as an open question in the design document.
+ * <p>This is the narrow form for the one kernel shape that exists today, {@code out = col * mul +
+ * add} with optional selection {@code col > threshold}. Widening it is the point at which either
+ * the catalogue grows or the planner starts generating device code, which is the fork in the road
+ * recorded as an open question in the design document.
  */
 public final class GpuCalcSpec implements Serializable {
 
@@ -56,6 +56,7 @@ public final class GpuCalcSpec implements Serializable {
     private final RowType outputType;
     private final int[] outputLayout;
     private final int rowCost;
+    private final int batchSize;
 
     public GpuCalcSpec(
             int inputFieldIndex,
@@ -64,7 +65,8 @@ public final class GpuCalcSpec implements Serializable {
             @Nullable Double threshold,
             RowType outputType,
             int[] outputLayout,
-            int rowCost) {
+            int rowCost,
+            int batchSize) {
         this.inputFieldIndex = inputFieldIndex;
         this.mul = mul;
         this.add = add;
@@ -72,6 +74,7 @@ public final class GpuCalcSpec implements Serializable {
         this.outputType = outputType;
         this.outputLayout = outputLayout;
         this.rowCost = rowCost;
+        this.batchSize = batchSize;
     }
 
     /** Index of the DOUBLE column the kernel reads. */
@@ -113,10 +116,27 @@ public final class GpuCalcSpec implements Serializable {
         return rowCost;
     }
 
+    /**
+     * Rows to stage before each kernel launch, from {@code table.exec.gpu-offload.batch-size}.
+     *
+     * <p>Passed in the spec rather than read from ambient state by the runtime, so that everything
+     * governing an offloaded operator arrives through one object and is visible in the plan.
+     */
+    public int batchSize() {
+        return batchSize;
+    }
+
     @Override
     public String toString() {
-        return "GpuCalcSpec[field=" + inputFieldIndex + ", out=col*" + mul + "+" + add
+        return "GpuCalcSpec[field="
+                + inputFieldIndex
+                + ", out=col*"
+                + mul
+                + "+"
+                + add
                 + (threshold == null ? ", no filter" : ", filter>" + threshold)
-                + ", cost=" + rowCost + "]";
+                + ", cost="
+                + rowCost
+                + "]";
     }
 }

@@ -15,6 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.flink.table.gpu.gather;
 
 import org.apache.flink.table.data.RowData;
@@ -31,10 +32,10 @@ import org.apache.flink.table.data.binary.BinaryRowData;
  * serializer.
  *
  * <p>Two properties of this format remove work that a previous Flink/TornadoVM integration had to
- * do by hand. Field bytes are in <b>native</b> order, because access goes through
- * {@code MemorySegment.getDouble} to {@code UNSAFE}, never through {@code DataOutputSerializer}
- * (which byte-swaps to big-endian). And every fixed-length field is already 8-byte aligned by the
- * {@code pos * 8} slot layout, so no padding pass is needed.
+ * do by hand. Field bytes are in <b>native</b> order, because access goes through {@code
+ * MemorySegment.getDouble} to {@code UNSAFE}, never through {@code DataOutputSerializer} (which
+ * byte-swaps to big-endian). And every fixed-length field is already 8-byte aligned by the {@code
+ * pos * 8} slot layout, so no padding pass is needed.
  */
 final class BinaryDoubleGather implements RowGather {
 

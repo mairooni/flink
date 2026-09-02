@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.table.planner.plan.gpu;
+package org.apache.flink.table.runtime.gpu;
 
 import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
 import org.apache.flink.table.data.RowData;

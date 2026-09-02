@@ -15,6 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.flink.table.gpu.gather;
 
 import org.apache.flink.table.data.RowData;
@@ -51,9 +52,9 @@ public interface RowGather {
     /**
      * Optionally consumes a run of rows in one operation, returning how many were taken.
      *
-     * <p>Returning 0 -- the default -- means the caller falls back to {@link #accept} per row.
-     * Only a source whose data is already column-major can do better, so this is where tier 1
-     * stops paying the per-row staging cost that dominates every other tier.
+     * <p>Returning 0 -- the default -- means the caller falls back to {@link #accept} per row. Only
+     * a source whose data is already column-major can do better, so this is where tier 1 stops
+     * paying the per-row staging cost that dominates every other tier.
      */
     default int acceptBulk(List<RowData> rows, int from, int to, int position) {
         return 0;
@@ -65,10 +66,10 @@ public interface RowGather {
     /**
      * Picks the cheapest gather for the concrete {@link RowData} implementation actually observed.
      *
-     * <p>This is a runtime decision because the physical row class is not part of the
-     * {@code ExecNodeGraph}: the planner declares only {@code InternalTypeInfo<RowData>} and the
-     * connector chooses the implementation inside {@code getScanRuntimeProvider}. There is no
-     * source ability for negotiating layout.
+     * <p>This is a runtime decision because the physical row class is not part of the {@code
+     * ExecNodeGraph}: the planner declares only {@code InternalTypeInfo<RowData>} and the connector
+     * chooses the implementation inside {@code getScanRuntimeProvider}. There is no source ability
+     * for negotiating layout.
      */
     static RowGather forDouble(RowData sample, int field, DoubleColumn target) {
         return forDouble(sample, field, target, null);

@@ -15,6 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.flink.table.planner.plan.gpu;
 
 import java.util.Objects;
@@ -51,7 +52,9 @@ public final class RowCost {
         return weight == 0 ? ZERO : new RowCost(weight, null);
     }
 
-    /** @param reason what about the expression cannot be expressed as a kernel; surfaced in EXPLAIN */
+    /**
+     * @param reason what about the expression cannot be expressed as a kernel; surfaced in EXPLAIN
+     */
     public static RowCost ineligible(String reason) {
         return new RowCost(0, Objects.requireNonNull(reason));
     }

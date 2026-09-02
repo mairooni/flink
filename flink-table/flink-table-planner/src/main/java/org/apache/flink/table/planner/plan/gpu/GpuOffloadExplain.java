@@ -34,10 +34,10 @@ import java.util.Map;
  * answer is invisible: the processor annotates nodes but does not change the plan, so an offloaded
  * and a rejected plan print identically.
  *
- * <p>Deliberately a separate section rather than extra attributes on the node descriptions.
- * {@code ExecNodeBase.description} is fixed at construction and is compared verbatim by a large
- * number of plan-comparison test resources; appending to it would rewrite all of them for a feature
- * that is off by default.
+ * <p>Deliberately a separate section rather than extra attributes on the node descriptions. {@code
+ * ExecNodeBase.description} is fixed at construction and is compared verbatim by a large number of
+ * plan-comparison test resources; appending to it would rewrite all of them for a feature that is
+ * off by default.
  */
 public class GpuOffloadExplain {
 
@@ -60,8 +60,7 @@ public class GpuOffloadExplain {
                         if (assignment.groupId() < 0) {
                             ungrouped.add(node);
                         } else {
-                            byGroup.computeIfAbsent(
-                                            assignment.groupId(), key -> new ArrayList<>())
+                            byGroup.computeIfAbsent(assignment.groupId(), key -> new ArrayList<>())
                                     .add(node);
                         }
                     }

@@ -15,6 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.flink.table.gpu.kernels;
 
 import uk.ac.manchester.tornado.api.annotations.Parallel;
@@ -52,8 +53,12 @@ public final class FilterProjectKernels {
      * and is emitted directly from the staging buffer during the drain.
      */
     public static void scaleAndSelect(
-            DoubleArray val, DoubleArray out, IntArray mask,
-            double mul, double add, double threshold) {
+            DoubleArray val,
+            DoubleArray out,
+            IntArray mask,
+            double mul,
+            double add,
+            double threshold) {
         for (@Parallel int i = 0; i < val.getSize(); i++) {
             double v = val.get(i);
             out.set(i, v * mul + add);
@@ -90,8 +95,12 @@ public final class FilterProjectKernels {
      * in tests and to serve as the CPU arm of the benchmark. Must stay semantically identical.
      */
     public static void scaleAndSelectReference(
-            DoubleArray val, DoubleArray out, IntArray mask,
-            double mul, double add, double threshold) {
+            DoubleArray val,
+            DoubleArray out,
+            IntArray mask,
+            double mul,
+            double add,
+            double threshold) {
         for (int i = 0; i < val.getSize(); i++) {
             double v = val.get(i);
             out.set(i, v * mul + add);
@@ -105,13 +114,18 @@ public final class FilterProjectKernels {
      * offload: at intensity 0 the kernel is 2 flops and measured 0.4% of the breakdown.
      *
      * <p>The inner expression uses only multiply, add and {@code sqrt}, all of which are
-     * exactly-rounded in IEEE 754, so host and device should agree closely. Transcendentals
-     * (OpenCL {@code native_sin} versus {@code Math.sin}) would introduce differences that are
-     * about the math library rather than about correctness, and would obscure the measurement.
+     * exactly-rounded in IEEE 754, so host and device should agree closely. Transcendentals (OpenCL
+     * {@code native_sin} versus {@code Math.sin}) would introduce differences that are about the
+     * math library rather than about correctness, and would obscure the measurement.
      */
     public static void heavyScaleAndSelect(
-            DoubleArray val, DoubleArray out, IntArray mask,
-            double mul, double add, double threshold, int intensity) {
+            DoubleArray val,
+            DoubleArray out,
+            IntArray mask,
+            double mul,
+            double add,
+            double threshold,
+            int intensity) {
         for (@Parallel int i = 0; i < val.getSize(); i++) {
             double v = val.get(i);
             double acc = v;
@@ -129,8 +143,13 @@ public final class FilterProjectKernels {
 
     /** Host reference for {@link #heavyScaleAndSelect}. */
     public static void heavyScaleAndSelectReference(
-            DoubleArray val, DoubleArray out, IntArray mask,
-            double mul, double add, double threshold, int intensity) {
+            DoubleArray val,
+            DoubleArray out,
+            IntArray mask,
+            double mul,
+            double add,
+            double threshold,
+            int intensity) {
         for (int i = 0; i < val.getSize(); i++) {
             double v = val.get(i);
             double acc = v;

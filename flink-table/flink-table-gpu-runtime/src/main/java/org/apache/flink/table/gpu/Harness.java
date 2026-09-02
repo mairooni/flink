@@ -15,6 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.flink.table.gpu;
 
 import org.apache.flink.core.memory.MemorySegmentFactory;
@@ -50,6 +51,7 @@ public final class Harness {
     private static final double MUL = 2.0;
     private static final double ADD = 1.0;
     private static final double THRESHOLD = 0.5;
+
     /** Matches {@code VectorizedColumnBatch.DEFAULT_SIZE}, i.e. what Flink's readers produce. */
     private static final int COLUMN_BATCH_ROWS = VectorizedColumnBatch.DEFAULT_SIZE;
 
@@ -58,7 +60,8 @@ public final class Harness {
         int batchSize = args.length > 1 ? Integer.parseInt(args[1]) : 262_144;
         int[] intensities = args.length > 2 ? parseIntensities(args) : new int[] {0};
 
-        System.out.printf("rows=%,d  batch=%,d  query: SELECT id, val*%.1f+%.1f WHERE val > %.1f%n",
+        System.out.printf(
+                "rows=%,d  batch=%,d  query: SELECT id, val*%.1f+%.1f WHERE val > %.1f%n",
                 rows, batchSize, MUL, ADD, THRESHOLD);
 
         List<RowData> binary = generateBinary(rows);
@@ -120,15 +123,24 @@ public final class Harness {
     }
 
     private static void run(
-            String label, List<RowData> rows, int batchSize,
-            double[] expected, boolean[] expectedMask, int intensity, boolean bulk) {
+            String label,
+            List<RowData> rows,
+            int batchSize,
+            double[] expected,
+            boolean[] expectedMask,
+            int intensity,
+            boolean bulk) {
 
         try (FilterProjectEngine engine =
-                     new FilterProjectEngine(batchSize, MUL, ADD, THRESHOLD, true, intensity)) {
+                new FilterProjectEngine(batchSize, MUL, ADD, THRESHOLD, true, intensity)) {
             engine.open();
 
-            RowGather gather = RowGather.forDouble(
-                    rows.get(0), 1, engine.inputColumn(), bulk ? engine.inputSegment() : null);
+            RowGather gather =
+                    RowGather.forDouble(
+                            rows.get(0),
+                            1,
+                            engine.inputColumn(),
+                            bulk ? engine.inputSegment() : null);
 
             warmUp(engine, gather, rows, batchSize);
 
@@ -189,8 +201,11 @@ public final class Harness {
 
             OffloadMetrics m = engine.metrics();
             System.out.print(m.report(label + "  (" + gather.tier() + ")"));
-            System.out.printf("emitted=%,d  max_rel_err=%.3g  mismatches=%d  %s%n",
-                    emittedTotal, maxRelError, mismatches,
+            System.out.printf(
+                    "emitted=%,d  max_rel_err=%.3g  mismatches=%d  %s%n",
+                    emittedTotal,
+                    maxRelError,
+                    mismatches,
                     mismatches == 0 ? "RESULTS MATCH CPU" : "*** WRONG ***");
         }
     }
@@ -212,8 +227,8 @@ public final class Harness {
     }
 
     /**
-     * {@link BinaryRowData} rows pointing into <b>one shared backing array</b>, at the fixed 24-byte
-     * stride the format implies for two fields (8-byte null bitset plus two 8-byte slots).
+     * {@link BinaryRowData} rows pointing into <b>one shared backing array</b>, at the fixed
+     * 24-byte stride the format implies for two fields (8-byte null bitset plus two 8-byte slots).
      *
      * <p>Allocating a separate {@code byte[]} per row — the obvious way to write this — makes every
      * row a distinct cache line reached through a four-deep pointer chase, which is not how Flink
@@ -256,10 +271,10 @@ public final class Harness {
     }
 
     /**
-     * {@link ColumnarRowData} cursors over real {@link VectorizedColumnBatch}es of
-     * {@link VectorizedColumnBatch#DEFAULT_SIZE} rows — the shape a vectorized Parquet reader
-     * produces. Columns are plain {@link HeapDoubleVector}/{@link HeapLongVector} with no
-     * dictionary and no nulls, which is the only case the bulk gather accepts.
+     * {@link ColumnarRowData} cursors over real {@link VectorizedColumnBatch}es of {@link
+     * VectorizedColumnBatch#DEFAULT_SIZE} rows — the shape a vectorized Parquet reader produces.
+     * Columns are plain {@link HeapDoubleVector}/{@link HeapLongVector} with no dictionary and no
+     * nulls, which is the only case the bulk gather accepts.
      */
     private static List<RowData> generateColumnar(int rows) {
         Random random = new Random(42);
@@ -272,8 +287,7 @@ public final class Harness {
                 ids.vector[i] = base + i;
                 vals.vector[i] = random.nextDouble();
             }
-            VectorizedColumnBatch batch =
-                    new VectorizedColumnBatch(new ColumnVector[] {ids, vals});
+            VectorizedColumnBatch batch = new VectorizedColumnBatch(new ColumnVector[] {ids, vals});
             batch.setNumRows(n);
             for (int i = 0; i < n; i++) {
                 out.add(new ColumnarRowData(batch, i));

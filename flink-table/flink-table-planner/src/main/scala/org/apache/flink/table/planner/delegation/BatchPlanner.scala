@@ -28,10 +28,10 @@ import org.apache.flink.table.delegation.{Executor, InternalPlan}
 import org.apache.flink.table.module.ModuleManager
 import org.apache.flink.table.operations.Operation
 import org.apache.flink.table.planner.plan.`trait`.FlinkRelDistributionTraitDef
+import org.apache.flink.table.planner.plan.gpu.{GpuOffloadExplain, GpuOffloadOptions}
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeGraph
 import org.apache.flink.table.planner.plan.nodes.exec.batch.BatchExecNode
 import org.apache.flink.table.planner.plan.nodes.exec.processor.{AdaptiveJoinProcessor, DeadlockBreakupProcessor, DynamicFilteringDependencyProcessor, ExecNodeGraphProcessor, ForwardHashExchangeProcessor, GpuOffloadProcessor, MultipleInputNodeCreationProcessor}
-import org.apache.flink.table.planner.plan.gpu.{GpuOffloadExplain, GpuOffloadOptions}
 import org.apache.flink.table.planner.plan.nodes.exec.utils.ExecNodePlanDumper
 import org.apache.flink.table.planner.plan.optimize.{BatchCommonSubGraphBasedOptimizer, Optimizer}
 import org.apache.flink.table.planner.plan.utils.FlinkRelOptUtil

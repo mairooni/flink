@@ -15,6 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.flink.table.planner.plan.gpu;
 
 import org.apache.calcite.rel.type.RelDataType;
@@ -46,9 +47,9 @@ import java.util.List;
  * record is read. Cost is counted in weighted operations per row (see {@link OperatorWeights}), and
  * compared against a floor calibrated once per device.
  *
- * <p>Why a floor is needed at all: a predicate that only checks types admits
- * {@code val * 2.0 + 1.0}, which measures 0.54× against CPU — the offload would make such queries
- * roughly twice as slow, silently. Type eligibility is necessary and nowhere near sufficient.
+ * <p>Why a floor is needed at all: a predicate that only checks types admits {@code val * 2.0 +
+ * 1.0}, which measures 0.54× against CPU — the offload would make such queries roughly twice as
+ * slow, silently. Type eligibility is necessary and nowhere near sufficient.
  *
  * <h2>Common subexpressions are counted more than once</h2>
  *
@@ -144,8 +145,11 @@ public final class GpuCostEstimator implements RexVisitor<RowCost> {
     @Override
     public RowCost visitCall(RexCall call) {
         if (!isSupportedType(call.getType())) {
-            return RowCost.ineligible("unsupported result type " + call.getType()
-                    + " from " + call.getOperator().getName());
+            return RowCost.ineligible(
+                    "unsupported result type "
+                            + call.getType()
+                            + " from "
+                            + call.getOperator().getName());
         }
 
         Integer weight = weightOf(call);

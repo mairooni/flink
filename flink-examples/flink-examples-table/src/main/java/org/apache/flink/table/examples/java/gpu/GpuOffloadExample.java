@@ -79,11 +79,11 @@ public final class GpuOffloadExample {
         final List<Row> withoutGpu = run(rows, false);
         final List<Row> withGpu = run(rows, true);
 
-        System.out.printf("%nrows without GPU: %,d%nrows with GPU:    %,d%n",
+        System.out.printf(
+                "%nrows without GPU: %,d%nrows with GPU:    %,d%n",
                 withoutGpu.size(), withGpu.size());
         if (!withoutGpu.equals(withGpu)) {
-            throw new IllegalStateException(
-                    "GPU offload changed the query result, which is a bug");
+            throw new IllegalStateException("GPU offload changed the query result, which is a bug");
         }
         System.out.println("Results are identical.");
     }
@@ -100,13 +100,19 @@ public final class GpuOffloadExample {
                         + "  val DOUBLE\n"
                         + ") WITH (\n"
                         + "  'connector' = 'datagen',\n"
-                        + "  'number-of-rows' = '" + rows + "',\n"
+                        + "  'number-of-rows' = '"
+                        + rows
+                        + "',\n"
                         + "  'fields.id.kind' = 'sequence',\n"
                         + "  'fields.id.start' = '0',\n"
-                        + "  'fields.id.end' = '" + (rows - 1) + "',\n"
+                        + "  'fields.id.end' = '"
+                        + (rows - 1)
+                        + "',\n"
                         + "  'fields.val.kind' = 'sequence',\n"
                         + "  'fields.val.start' = '0',\n"
-                        + "  'fields.val.end' = '" + (rows - 1) + "'\n"
+                        + "  'fields.val.end' = '"
+                        + (rows - 1)
+                        + "'\n"
                         + ")");
 
         if (gpu) {
@@ -114,15 +120,20 @@ public final class GpuOffloadExample {
             env.getConfig().getConfiguration().setString("table.exec.gpu-offload.enabled", "true");
             // See the class comment: this query is well below the calibrated floor, and is only
             // offloaded here because it matches the kernel the runtime implements.
-            env.getConfig().getConfiguration().setString("table.exec.gpu-offload.min-row-cost", "1");
+            env.getConfig()
+                    .getConfiguration()
+                    .setString("table.exec.gpu-offload.min-row-cost", "1");
         }
 
         final String query =
                 "SELECT id, val * 2.0 + 1.0 AS scaled\n"
                         + "FROM Measurements\n"
-                        + "WHERE val > " + (rows / 2) + ".0";
+                        + "WHERE val > "
+                        + (rows / 2)
+                        + ".0";
 
-        System.out.println("========== " + (gpu ? "GPU offload enabled" : "default") + " ==========");
+        System.out.println(
+                "========== " + (gpu ? "GPU offload enabled" : "default") + " ==========");
         // With offload enabled, EXPLAIN gains a "== GPU Offload ==" section reporting which
         // subtrees were selected and, for those that were not, why.
         System.out.println(env.explainSql(query));

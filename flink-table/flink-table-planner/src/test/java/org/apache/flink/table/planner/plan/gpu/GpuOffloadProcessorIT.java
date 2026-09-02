@@ -98,7 +98,8 @@ class GpuOffloadProcessorIT {
         List<BatchExecCalc> calcs = planCalcs("SELECT id, " + HEAVY + " AS h FROM t");
 
         assertEquals(1, calcs.size());
-        assertNull(calcs.get(0).getGpuOffloadAssignment(),
+        assertNull(
+                calcs.get(0).getGpuOffloadAssignment(),
                 "with the flag off the processor must not annotate anything");
     }
 
@@ -124,7 +125,8 @@ class GpuOffloadProcessorIT {
         GpuOffloadAssignment assignment = calcs.get(0).getGpuOffloadAssignment();
         assertNotNull(assignment);
         assertFalse(assignment.isOffloaded(), "measured 0.54x against CPU");
-        assertTrue(assignment.verdict().reason().contains("below cost floor"),
+        assertTrue(
+                assignment.verdict().reason().contains("below cost floor"),
                 assignment.verdict()::reason);
     }
 
@@ -138,8 +140,7 @@ class GpuOffloadProcessorIT {
 
         GpuOffloadAssignment assignment = calcs.get(0).getGpuOffloadAssignment();
         assertNotNull(assignment);
-        assertTrue(assignment.isOffloaded(),
-                "cost 3 clears a floor of 1; only the config changed");
+        assertTrue(assignment.isOffloaded(), "cost 3 clears a floor of 1; only the config changed");
     }
 
     @Test
@@ -154,9 +155,12 @@ class GpuOffloadProcessorIT {
         GpuOffloadAssignment assignment = calcs.get(0).getGpuOffloadAssignment();
         assertNotNull(assignment);
         assertFalse(assignment.isOffloaded());
-        assertEquals(-1, assignment.groupId(),
+        assertEquals(
+                -1,
+                assignment.groupId(),
                 "an ineligible node must not join a group it would poison");
-        assertTrue(assignment.verdict().reason().contains("not expressible on device"),
+        assertTrue(
+                assignment.verdict().reason().contains("not expressible on device"),
                 assignment.verdict()::reason);
     }
 }

@@ -15,6 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.flink.table.gpu.gather;
 
 import org.apache.flink.table.data.RowData;
@@ -25,17 +26,17 @@ import org.apache.flink.table.data.columnar.ColumnarRowData;
  * column-major and packed ({@code HeapIntVector.vector} is a plain {@code int[]}), so no
  * transposition is needed at all.
  *
- * <p><b>Currently degrades to per-row access.</b> {@code ColumnarRowData} exposes
- * {@code setVectorizedColumnBatch}/{@code setRowId} but no getters, so the underlying
- * {@code VectorizedColumnBatch} is unreachable without either reflection or a small patch to
- * {@code flink-table-common}. Until that patch lands this class is a correctness placeholder that
- * records the tier honestly rather than claiming a fast path it does not take.
+ * <p><b>Currently degrades to per-row access.</b> {@code ColumnarRowData} exposes {@code
+ * setVectorizedColumnBatch}/{@code setRowId} but no getters, so the underlying {@code
+ * VectorizedColumnBatch} is unreachable without either reflection or a small patch to {@code
+ * flink-table-common}. Until that patch lands this class is a correctness placeholder that records
+ * the tier honestly rather than claiming a fast path it does not take.
  *
- * <p>When the batch does become reachable, a bulk copy is only valid under
- * {@code dictionary == null && !isRepeating && noNulls}: {@code HeapIntVector.getInt} returns
- * {@code dictionary.decodeToInt(dictionaryIds.vector[i])} when dictionary-encoded, and
- * {@code OrcLongColumnVector} indexes {@code vector[isRepeating ? 0 : i]}. Both would silently
- * produce wrong values rather than fail.
+ * <p>When the batch does become reachable, a bulk copy is only valid under {@code dictionary ==
+ * null && !isRepeating && noNulls}: {@code HeapIntVector.getInt} returns {@code
+ * dictionary.decodeToInt(dictionaryIds.vector[i])} when dictionary-encoded, and {@code
+ * OrcLongColumnVector} indexes {@code vector[isRepeating ? 0 : i]}. Both would silently produce
+ * wrong values rather than fail.
  */
 final class ColumnarDoubleGather implements RowGather {
 

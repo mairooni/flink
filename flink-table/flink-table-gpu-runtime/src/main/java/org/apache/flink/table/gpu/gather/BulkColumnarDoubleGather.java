@@ -15,6 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.flink.table.gpu.gather;
 
 import org.apache.flink.table.data.RowData;
@@ -36,8 +37,8 @@ import java.util.List;
  *
  * <p>This is the only gather that attacks the host-side staging cost rather than paying it: a
  * vectorized Parquet/ORC source has already produced the column packed and column-major, so there
- * is no transposition to do. The rest is a memcpy from the heap {@code double[]} into the
- * off-heap staging buffer.
+ * is no transposition to do. The rest is a memcpy from the heap {@code double[]} into the off-heap
+ * staging buffer.
  *
  * <h2>Reaching the batch</h2>
  *
@@ -61,6 +62,7 @@ public final class BulkColumnarDoubleGather implements RowGather {
 
     private static final VarHandle BATCH;
     private static final VarHandle ROW_ID;
+
     /** {@code noNulls} is protected; {@code hasDictionary()} next to it is public. */
     private static final VarHandle NO_NULLS;
 
@@ -68,16 +70,22 @@ public final class BulkColumnarDoubleGather implements RowGather {
         try {
             MethodHandles.Lookup lookup =
                     MethodHandles.privateLookupIn(ColumnarRowData.class, MethodHandles.lookup());
-            BATCH = lookup.findVarHandle(
-                    ColumnarRowData.class, "vectorizedColumnBatch", VectorizedColumnBatch.class);
+            BATCH =
+                    lookup.findVarHandle(
+                            ColumnarRowData.class,
+                            "vectorizedColumnBatch",
+                            VectorizedColumnBatch.class);
             ROW_ID = lookup.findVarHandle(ColumnarRowData.class, "rowId", int.class);
-            MethodHandles.Lookup vectorLookup = MethodHandles.privateLookupIn(
-                    AbstractWritableVector.class, MethodHandles.lookup());
-            NO_NULLS = vectorLookup.findVarHandle(
-                    AbstractWritableVector.class, "noNulls", boolean.class);
+            MethodHandles.Lookup vectorLookup =
+                    MethodHandles.privateLookupIn(
+                            AbstractWritableVector.class, MethodHandles.lookup());
+            NO_NULLS =
+                    vectorLookup.findVarHandle(
+                            AbstractWritableVector.class, "noNulls", boolean.class);
         } catch (ReflectiveOperationException e) {
             throw new ExceptionInInitializerError(
-                    "ColumnarRowData layout changed; the bulk columnar gather needs updating: " + e);
+                    "ColumnarRowData layout changed; the bulk columnar gather needs updating: "
+                            + e);
         }
     }
 
@@ -142,8 +150,10 @@ public final class BulkColumnarDoubleGather implements RowGather {
         }
 
         MemorySegment.copy(
-                vector.vector, startRowId,
-                targetSegment, ValueLayout.JAVA_DOUBLE,
+                vector.vector,
+                startRowId,
+                targetSegment,
+                ValueLayout.JAVA_DOUBLE,
                 (long) position * Double.BYTES,
                 run);
 

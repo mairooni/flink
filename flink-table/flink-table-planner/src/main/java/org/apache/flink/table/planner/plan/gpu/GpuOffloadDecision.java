@@ -15,6 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.flink.table.planner.plan.gpu;
 
 import org.apache.calcite.rex.RexNode;
@@ -69,14 +70,17 @@ public final class GpuOffloadDecision {
      */
     public static final int DEFAULT_MIN_ROW_COST = 96;
 
-    /** Log-interpolated break-even from the calibration sweep; see {@link #DEFAULT_MIN_ROW_COST}. */
+    /**
+     * Log-interpolated break-even from the calibration sweep; see {@link #DEFAULT_MIN_ROW_COST}.
+     */
     public static final int MEASURED_BREAK_EVEN = 70;
 
     private final int minRowCost;
 
     public GpuOffloadDecision(int minRowCost) {
         if (minRowCost < 0) {
-            throw new IllegalArgumentException("min-row-cost must be non-negative, was " + minRowCost);
+            throw new IllegalArgumentException(
+                    "min-row-cost must be non-negative, was " + minRowCost);
         }
         this.minRowCost = minRowCost;
     }
@@ -162,12 +166,17 @@ public final class GpuOffloadDecision {
             return new Verdict(false, 0, "not expressible on device: " + cost.rejection());
         }
         if (cost.weight() < minRowCost) {
-            return new Verdict(false, cost.weight(), String.format(
-                    "below cost floor: %d < %d weighted ops/row; CPU execution is expected to be "
-                            + "faster than the staging and transfer this would add",
-                    cost.weight(), minRowCost));
+            return new Verdict(
+                    false,
+                    cost.weight(),
+                    String.format(
+                            "below cost floor: %d < %d weighted ops/row; CPU execution is expected to be "
+                                    + "faster than the staging and transfer this would add",
+                            cost.weight(), minRowCost));
         }
-        return new Verdict(true, cost.weight(), String.format(
-                "%d weighted ops/row clears floor of %d", cost.weight(), minRowCost));
+        return new Verdict(
+                true,
+                cost.weight(),
+                String.format("%d weighted ops/row clears floor of %d", cost.weight(), minRowCost));
     }
 }
