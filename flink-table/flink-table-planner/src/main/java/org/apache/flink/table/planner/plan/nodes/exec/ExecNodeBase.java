@@ -31,6 +31,7 @@ import org.apache.flink.table.delegation.Planner;
 import org.apache.flink.table.planner.codegen.CodeGeneratorContext;
 import org.apache.flink.table.planner.delegation.PlannerBase;
 import org.apache.flink.table.planner.plan.fusion.OpFusionCodegenSpecGenerator;
+import org.apache.flink.table.planner.plan.gpu.GpuOffloadAssignment;
 import org.apache.flink.table.planner.plan.gpu.RowCost;
 import org.apache.flink.table.planner.plan.nodes.exec.serde.ConfigurationJsonSerializerFilter;
 import org.apache.flink.table.planner.plan.nodes.exec.utils.TransformationMetadata;
@@ -84,6 +85,8 @@ public abstract class ExecNodeBase<T> implements ExecNode<T> {
     private transient Transformation<T> transformation;
 
     private @Nullable transient OpFusionCodegenSpecGenerator fusionCodegenSpecGenerator;
+
+    private @Nullable transient GpuOffloadAssignment gpuOffloadAssignment;
 
     /** Holds the context information (id, name, version) as deserialized from a JSON plan. */
     @JsonProperty(value = FIELD_NAME_TYPE, access = JsonProperty.Access.WRITE_ONLY)
@@ -311,6 +314,16 @@ public abstract class ExecNodeBase<T> implements ExecNode<T> {
     @Override
     public boolean supportGpuOffload() {
         return false;
+    }
+
+    @Override
+    public void setGpuOffloadAssignment(@Nullable GpuOffloadAssignment assignment) {
+        this.gpuOffloadAssignment = assignment;
+    }
+
+    @Override
+    public @Nullable GpuOffloadAssignment getGpuOffloadAssignment() {
+        return gpuOffloadAssignment;
     }
 
     @Override

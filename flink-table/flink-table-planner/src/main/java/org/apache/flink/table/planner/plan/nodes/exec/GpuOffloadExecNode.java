@@ -18,7 +18,10 @@
 
 package org.apache.flink.table.planner.plan.nodes.exec;
 
+import org.apache.flink.table.planner.plan.gpu.GpuOffloadAssignment;
 import org.apache.flink.table.planner.plan.gpu.RowCost;
+
+import javax.annotation.Nullable;
 
 /**
  * Capability interface for {@link ExecNode}s whose per-record work can be executed as a
@@ -50,4 +53,17 @@ public interface GpuOffloadExecNode {
      * <p>Only meaningful when {@link #supportGpuOffload()} is true.
      */
     RowCost estimateRowCost();
+
+    /**
+     * Records what {@code GpuOffloadProcessor} decided for this node.
+     *
+     * <p>The processor runs over the whole graph before translation begins, so the decision has to
+     * be carried across that boundary to the point where the node builds its {@code
+     * Transformation}.
+     */
+    void setGpuOffloadAssignment(@Nullable GpuOffloadAssignment assignment);
+
+    /** Null when the processor did not run, or did not examine this node. */
+    @Nullable
+    GpuOffloadAssignment getGpuOffloadAssignment();
 }

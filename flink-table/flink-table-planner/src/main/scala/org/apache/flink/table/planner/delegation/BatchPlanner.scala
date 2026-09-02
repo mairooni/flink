@@ -30,7 +30,7 @@ import org.apache.flink.table.operations.Operation
 import org.apache.flink.table.planner.plan.`trait`.FlinkRelDistributionTraitDef
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeGraph
 import org.apache.flink.table.planner.plan.nodes.exec.batch.BatchExecNode
-import org.apache.flink.table.planner.plan.nodes.exec.processor.{AdaptiveJoinProcessor, DeadlockBreakupProcessor, DynamicFilteringDependencyProcessor, ExecNodeGraphProcessor, ForwardHashExchangeProcessor, MultipleInputNodeCreationProcessor}
+import org.apache.flink.table.planner.plan.nodes.exec.processor.{AdaptiveJoinProcessor, DeadlockBreakupProcessor, DynamicFilteringDependencyProcessor, ExecNodeGraphProcessor, ForwardHashExchangeProcessor, GpuOffloadProcessor, MultipleInputNodeCreationProcessor}
 import org.apache.flink.table.planner.plan.nodes.exec.utils.ExecNodePlanDumper
 import org.apache.flink.table.planner.plan.optimize.{BatchCommonSubGraphBasedOptimizer, Optimizer}
 import org.apache.flink.table.planner.plan.utils.FlinkRelOptUtil
@@ -84,6 +84,11 @@ class BatchPlanner(
     }
     processors.add(new ForwardHashExchangeProcessor)
     processors.add(new AdaptiveJoinProcessor)
+    // Last: it annotates rather than rewrites, so it must see the final node structure. In
+    // particular multiple-input creation has already grouped what it is going to group, and the
+    // offload grouping should not disagree with it. Gated internally on
+    // table.exec.gpu-offload.enabled, so this is a no-op unless the flag is set.
+    processors.add(new GpuOffloadProcessor)
     processors
   }
 
