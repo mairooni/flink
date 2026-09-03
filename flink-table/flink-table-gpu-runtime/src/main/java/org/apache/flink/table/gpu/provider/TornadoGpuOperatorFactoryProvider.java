@@ -54,8 +54,44 @@ public class TornadoGpuOperatorFactoryProvider implements GpuOperatorFactoryProv
      */
     private static final boolean PROFILE = true;
 
+    /**
+     * Why TornadoVM cannot be used in this JVM, or null if it can.
+     *
+     * <p>Probed once, by loading a class compiled against TornadoVM's off-heap array types. Those
+     * are built on {@code java.lang.foreign}, a preview API on JDK 21, so a JVM started without
+     * {@code --enable-preview} cannot load them.
+     *
+     * <p>The probe exists because failing here is far better than failing later. Without it the
+     * planner substitutes a GPU operator, the job is submitted, and the TaskManager dies
+     * deserializing the operator with {@code UnsupportedClassVersionError: Preview features are not
+     * enabled} -- an error that says nothing about GPU offload and appears a long way from its
+     * cause. Declining instead makes the planner fall back to code generation and report the reason
+     * in EXPLAIN.
+     */
+    private static final String UNAVAILABLE = probeTornado();
+
+    private static String probeTornado() {
+        try {
+            // Loading the class is the check; it drags in DoubleArray and IntArray.
+            Class.forName(
+                    "org.apache.flink.table.gpu.operator.FilterProjectEngine",
+                    false,
+                    TornadoGpuOperatorFactoryProvider.class.getClassLoader());
+            return null;
+        } catch (Throwable t) {
+            String detail = t.getMessage() == null ? t.getClass().getName() : t.getMessage();
+            if (t instanceof UnsupportedClassVersionError) {
+                return "TornadoVM needs --enable-preview on this JVM (" + detail + ")";
+            }
+            return "TornadoVM is not usable in this JVM: " + detail;
+        }
+    }
+
     @Override
     public Optional<StreamOperatorFactory<RowData>> createCalcOperatorFactory(GpuCalcSpec spec) {
+        if (UNAVAILABLE != null) {
+            return Optional.empty();
+        }
         if (!canStageOutput(spec)) {
             return Optional.empty();
         }
@@ -90,6 +126,6 @@ public class TornadoGpuOperatorFactoryProvider implements GpuOperatorFactoryProv
 
     @Override
     public String describe() {
-        return "TornadoVM (profile=" + PROFILE + ")";
+        return UNAVAILABLE != null ? UNAVAILABLE : "TornadoVM (profile=" + PROFILE + ")";
     }
 }

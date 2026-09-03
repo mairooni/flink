@@ -49,18 +49,29 @@ import java.util.List;
  *
  * <h2>Prerequisites</h2>
  *
- * <p>Offload is off by default and degrades silently: with the flag on but no GPU runtime on the
- * classpath, the planner falls back to normal code generation and says so in {@code EXPLAIN}. So
- * this example runs correctly either way — it simply does not use a GPU unless the following are
- * present.
+ * <p>The example <b>fails</b> if offload was requested but did not happen. Matching results are not
+ * evidence on their own: if the GPU was never used, both runs executed the same CPU plan and would
+ * match trivially. Two things must be in place, and the failure message names whichever is missing.
  *
  * <ul>
- *   <li>A TornadoVM installation, and its JVM arguments applied to the TaskManagers via {@code
- *       env.java.opts} in {@code flink-conf.yaml} (or as VM options when running from an IDE).
- *   <li>{@code flink-gpu-runtime} on the classpath. It registers a {@code
+ *   <li>{@code flink-table-gpu-runtime} on the classpath. It registers a {@code
  *       GpuOperatorFactoryProvider} through {@code META-INF/services}; the planner discovers it
- *       with {@link java.util.ServiceLoader} and holds no compile-time reference to it.
+ *       with {@link java.util.ServiceLoader} and holds no compile-time reference to it. This module
+ *       declares it at runtime scope, so it is present when run from the IDE.
+ *   <li>TornadoVM's JVM arguments. They are not optional and are not inherited from the build:
+ *       TornadoVM's off-heap array types use a preview API, so without {@code --enable-preview} and
+ *       the JVMCI flags the runtime declines and the planner falls back.
  * </ul>
+ *
+ * <h2>Running from IntelliJ</h2>
+ *
+ * <p>Run → Edit Configurations → Modify options → Add VM options, then paste:
+ *
+ * <pre>@/path/to/tornadovm-sdk/tornado-argfile</pre>
+ *
+ * <p>The distribution ships that argfile with the JVMCI flags, module path and {@code
+ * --enable-preview} already assembled. For a cluster, the same content goes into {@code
+ * env.java.opts} in {@code flink-conf.yaml}.
  *
  * <h2>A note on the query</h2>
  *
@@ -76,19 +87,82 @@ public final class GpuOffloadExample {
     public static void main(String[] args) throws Exception {
         final int rows = args.length > 0 ? Integer.parseInt(args[0]) : 200_000;
 
-        final List<Row> withoutGpu = run(rows, false);
-        final List<Row> withGpu = run(rows, true);
+        final Run withoutGpu = run(rows, false);
+        final Run withGpu = run(rows, true);
 
         System.out.printf(
                 "%nrows without GPU: %,d%nrows with GPU:    %,d%n",
-                withoutGpu.size(), withGpu.size());
-        if (!withoutGpu.equals(withGpu)) {
+                withoutGpu.rows.size(), withGpu.rows.size());
+
+        if (!withoutGpu.rows.equals(withGpu.rows)) {
             throw new IllegalStateException("GPU offload changed the query result, which is a bug");
         }
-        System.out.println("Results are identical.");
+
+        // Matching results prove nothing on their own. If offload did not happen then both runs
+        // executed the same CPU plan and would match trivially, so the assertion that carries the
+        // weight is that the work actually reached the device.
+        if (!withGpu.offloaded()) {
+            System.out.println();
+            System.out.println(
+                    "Results match, but THE GPU WAS NOT USED. Both runs executed on the CPU,");
+            System.out.println("so this comparison demonstrates nothing. The planner reported:");
+            System.out.println();
+            System.out.println("  " + withGpu.offloadReason());
+            System.out.println();
+            System.out.println(SETUP_HELP);
+            throw new IllegalStateException("GPU offload did not run; see the reason above");
+        }
+
+        System.out.println("Results are identical, and the query ran on the GPU.");
     }
 
-    private static List<Row> run(int rows, boolean gpu) throws Exception {
+    private static final String SETUP_HELP =
+            "Running on a GPU needs both of:\n"
+                    + "  1. flink-table-gpu-runtime on the classpath. It registers the provider\n"
+                    + "     via META-INF/services; in a distribution, put the jar in lib/.\n"
+                    + "  2. TornadoVM's JVM arguments. The distribution ships them as an argfile:\n"
+                    + "     pass '@$TORNADO_SDK/tornado-argfile' as a VM option (IntelliJ: Run ->\n"
+                    + "     Edit Configurations -> Modify options -> Add VM options), or put the\n"
+                    + "     same content in env.java.opts in flink-conf.yaml for a cluster.\n"
+                    + "     Without them TornadoVM cannot initialise and the planner falls back.";
+
+    /** One execution of the query, carrying the plan so the caller can tell what actually ran. */
+    private static final class Run {
+
+        private final List<Row> rows;
+        private final String plan;
+
+        Run(List<Row> rows, String plan) {
+            this.rows = rows;
+            this.plan = plan;
+        }
+
+        /**
+         * Whether a subtree really executed on the device.
+         *
+         * <p>Read back from EXPLAIN rather than tracked separately, because EXPLAIN is rendered
+         * after translation and so reports the outcome of the substitution attempt rather than
+         * merely the planner's intent. A node the cost gate selected but which then fell back is
+         * reported as CPU, with the reason.
+         */
+        boolean offloaded() {
+            return plan.contains("GPU  subtree");
+        }
+
+        String offloadReason() {
+            for (String line : plan.split("\n")) {
+                final String trimmed = line.trim();
+                if (trimmed.startsWith("selected but fell back")
+                        || trimmed.startsWith("below cost floor")
+                        || trimmed.startsWith("not expressible on device")) {
+                    return trimmed;
+                }
+            }
+            return "no GPU Offload section in the plan; is table.exec.gpu-offload.enabled set?";
+        }
+    }
+
+    private static Run run(int rows, boolean gpu) throws Exception {
         final TableEnvironment env =
                 TableEnvironment.create(EnvironmentSettings.newInstance().inBatchMode().build());
 
@@ -135,15 +209,17 @@ public final class GpuOffloadExample {
         System.out.println(
                 "========== " + (gpu ? "GPU offload enabled" : "default") + " ==========");
         // With offload enabled, EXPLAIN gains a "== GPU Offload ==" section reporting which
-        // subtrees were selected and, for those that were not, why.
-        System.out.println(env.explainSql(query));
+        // subtrees were selected and, for those that were not, why. It is rendered after
+        // translation, so it reflects what actually ran rather than only what was intended.
+        final String plan = env.explainSql(query);
+        System.out.println(plan);
 
         final List<Row> result = new ArrayList<>();
         try (CloseableIterator<Row> rows0 = env.sqlQuery(query).execute().collect()) {
             rows0.forEachRemaining(result::add);
         }
         result.sort(Comparator.comparingLong(row -> (Long) row.getField(0)));
-        return result;
+        return new Run(result, plan);
     }
 
     private GpuOffloadExample() {}

@@ -69,6 +69,19 @@ under the License.
 			<artifactId>flink-table-runtime</artifactId>
 			<version>${project.version}</version>
 		</dependency>
+		<!--
+			Runtime scope: the example compiles against the Table API alone and never references
+			this module. It is here so that the GpuOperatorFactoryProvider is on the classpath and
+			ServiceLoader can find it, which is what putting the jar in a distribution's lib/ does
+			for a real deployment. Without it the planner silently falls back to CPU.
+		-->
+		<dependency>
+			<groupId>org.apache.flink</groupId>
+			<artifactId>flink-table-gpu-runtime</artifactId>
+			<version>${project.version}</version>
+			<scope>runtime</scope>
+		</dependency>
+
 		<dependency>
 			<groupId>org.apache.flink</groupId>
 			<artifactId>flink-table-planner_${scala.binary.version}</artifactId>
