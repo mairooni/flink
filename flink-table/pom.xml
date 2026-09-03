@@ -43,6 +43,7 @@ under the License.
 		<module>flink-table-planner-loader</module>
 		<module>flink-table-planner-loader-bundle</module>
 		<module>flink-table-runtime</module>
+		<module>flink-table-gpu-runtime</module>
 		<module>flink-sql-gateway-api</module>
 		<module>flink-sql-gateway</module>
 		<module>flink-sql-client</module>
@@ -54,19 +55,6 @@ under the License.
 		<module>flink-table-calcite-bridge</module>
 	</modules>
 
-	<profiles>
-		<profile>
-			<!--
-				GPU offload runtime. Off by default: it depends on TornadoVM, which is not
-				published to Maven Central and must be installed locally first, so including it
-				unconditionally would break a clean checkout.
-			-->
-			<id>gpu</id>
-			<modules>
-				<module>flink-table-gpu-runtime</module>
-			</modules>
-		</profile>
-	</profiles>
 
 	<dependencyManagement>
 		<dependencies>

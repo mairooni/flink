@@ -32,7 +32,6 @@ import org.apache.flink.table.planner.codegen.CodeGeneratorContext;
 import org.apache.flink.table.planner.delegation.PlannerBase;
 import org.apache.flink.table.planner.plan.fusion.OpFusionCodegenSpecGenerator;
 import org.apache.flink.table.planner.plan.gpu.GpuOffloadAssignment;
-import org.apache.flink.table.planner.plan.gpu.RowCost;
 import org.apache.flink.table.planner.plan.nodes.exec.serde.ConfigurationJsonSerializerFilter;
 import org.apache.flink.table.planner.plan.nodes.exec.utils.TransformationMetadata;
 import org.apache.flink.table.planner.plan.nodes.exec.visitor.ExecNodeVisitor;
@@ -312,11 +311,6 @@ public abstract class ExecNodeBase<T> implements ExecNode<T> {
     }
 
     @Override
-    public boolean supportGpuOffload() {
-        return false;
-    }
-
-    @Override
     public void setGpuOffloadAssignment(@Nullable GpuOffloadAssignment assignment) {
         this.gpuOffloadAssignment = assignment;
     }
@@ -324,14 +318,6 @@ public abstract class ExecNodeBase<T> implements ExecNode<T> {
     @Override
     public @Nullable GpuOffloadAssignment getGpuOffloadAssignment() {
         return gpuOffloadAssignment;
-    }
-
-    @Override
-    public RowCost estimateRowCost() {
-        // Reached only if a node claims support without overriding this; naming the class makes
-        // that mistake obvious in EXPLAIN rather than silently costing the node as free.
-        return RowCost.ineligible(
-                "ExecNode " + getClass().getSimpleName() + " declares no GPU row cost");
     }
 
     @Override

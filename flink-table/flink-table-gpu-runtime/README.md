@@ -20,7 +20,8 @@ and a cluster without this jar simply runs everything on the CPU.
 
 ## Building
 
-Not in the default build, because TornadoVM is not published to Maven Central. Install it first:
+Part of the default build. TornadoVM is not published to Maven Central, so its API jars must be
+installed locally first or the reactor will fail to resolve them:
 
 ```bash
 D=$TORNADO_SDK/share/java/tornado
@@ -30,8 +31,15 @@ for a in tornado-api tornado-annotation; do
     -Dversion=6.0.1-dev -Dpackaging=jar
 done
 
-mvn -Pgpu -pl flink-table/flink-table-gpu-runtime -am -DskipTests install
+mvn clean package -DskipTests
 ```
+
+No profile or extra argument is needed. The module was originally behind a `-Pgpu` profile; that
+was removed because it kept the module out of the reactor and therefore out of IntelliJ's project
+structure, where it appeared as loose class files with no configurable source root.
+
+Note that `activeByDefault` would not have been a fix: Maven deactivates such profiles as soon as
+any `-P` is given on the command line, and the documented build uses `-Pjava21-target`.
 
 Use `clean install` when changing the TornadoVM version. The `writeReplace()` that lets TornadoVM
 resolve a kernel from its method reference is emitted at compile time against a specific

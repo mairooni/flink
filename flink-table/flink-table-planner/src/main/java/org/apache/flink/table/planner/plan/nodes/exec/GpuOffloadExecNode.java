@@ -40,8 +40,16 @@ import javax.annotation.Nullable;
  */
 public interface GpuOffloadExecNode {
 
-    /** Whether this ExecNode's work is expressible as a device kernel at all. */
-    boolean supportGpuOffload();
+    /**
+     * Whether this ExecNode's work is expressible as a device kernel at all.
+     *
+     * <p>Defaulted rather than abstract so that adding this capability does not force every
+     * existing and future implementor of {@link ExecNode} to change. A node that has not been
+     * examined for offload behaves exactly as it did before.
+     */
+    default boolean supportGpuOffload() {
+        return false;
+    }
 
     /**
      * Estimated device-eligible work for one input row, in the weighted units of {@code
@@ -52,7 +60,12 @@ public interface GpuOffloadExecNode {
      *
      * <p>Only meaningful when {@link #supportGpuOffload()} is true.
      */
-    RowCost estimateRowCost();
+    default RowCost estimateRowCost() {
+        // Reached only if a node claims support without overriding this; naming the class makes
+        // that mistake obvious in EXPLAIN rather than silently costing the node as free.
+        return RowCost.ineligible(
+                "ExecNode " + getClass().getSimpleName() + " declares no GPU row cost");
+    }
 
     /**
      * Records what {@code GpuOffloadProcessor} decided for this node.
@@ -61,9 +74,14 @@ public interface GpuOffloadExecNode {
      * be carried across that boundary to the point where the node builds its {@code
      * Transformation}.
      */
-    void setGpuOffloadAssignment(@Nullable GpuOffloadAssignment assignment);
+    default void setGpuOffloadAssignment(@Nullable GpuOffloadAssignment assignment) {
+        // Discarded by default. A node that does not support offload is never selected, so there
+        // is nothing to remember; implementors that can be offloaded store it (see ExecNodeBase).
+    }
 
     /** Null when the processor did not run, or did not examine this node. */
     @Nullable
-    GpuOffloadAssignment getGpuOffloadAssignment();
+    default GpuOffloadAssignment getGpuOffloadAssignment() {
+        return null;
+    }
 }
