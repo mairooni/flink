@@ -57,8 +57,8 @@ public class GpuCalcOperator extends AbstractStreamOperator<RowData>
     private final int batchSize;
     private final boolean profile;
 
-    private transient FilterProjectEngine engine;
-    private transient RowGather gather;
+    private transient GeneratedKernelEngine engine;
+    private transient RowGather[] gathers;
     private transient PassThroughBuffer[] passThrough;
     private transient GenericRowData outRow;
     private transient StreamRecord<RowData> outElement;
@@ -75,17 +75,9 @@ public class GpuCalcOperator extends AbstractStreamOperator<RowData>
     @Override
     public void open() throws Exception {
         super.open();
-        engine =
-                new FilterProjectEngine(
-                        batchSize,
-                        spec.mul(),
-                        spec.add(),
-                        // With no condition the mask is never consulted in flush(), so the value
-                        // here is immaterial; NEGATIVE_INFINITY simply keeps the kernel's branch
-                        // predictable rather than encoding a filter that does not exist.
-                        spec.threshold() == null ? Double.NEGATIVE_INFINITY : spec.threshold(),
-                        profile);
+        engine = new GeneratedKernelEngine(spec, profile);
         engine.open();
+        gathers = new RowGather[spec.kernel().inputFieldIndexes().length];
 
         int[] layout = spec.outputLayout();
         passThrough = new PassThroughBuffer[layout.length];
@@ -104,18 +96,24 @@ public class GpuCalcOperator extends AbstractStreamOperator<RowData>
     @Override
     public void processElement(StreamRecord<RowData> element) throws Exception {
         RowData row = element.getValue();
-        if (gather == null) {
+        if (gathers[0] == null) {
             // The concrete RowData implementation is not knowable at plan time -- the planner
             // declares only InternalTypeInfo<RowData> and the connector picks the class -- so the
             // gather strategy is chosen from the first record actually seen.
-            gather =
-                    RowGather.forDouble(
-                            row,
-                            spec.inputFieldIndex(),
-                            engine.inputColumn(),
-                            engine.inputSegment());
+            int[] fields = spec.kernel().inputFieldIndexes();
+            for (int c = 0; c < fields.length; c++) {
+                final int column = c;
+                gathers[c] =
+                        RowGather.forDouble(
+                                row,
+                                fields[c],
+                                (position, value) -> engine.setInput(column, position, value),
+                                engine.inputSegment(c));
+            }
         }
-        gather.accept(row, buffered);
+        for (RowGather g : gathers) {
+            g.accept(row, buffered);
+        }
         for (PassThroughBuffer buffer : passThrough) {
             if (buffer != null) {
                 buffer.accept(row, buffered);
@@ -140,18 +138,19 @@ public class GpuCalcOperator extends AbstractStreamOperator<RowData>
         // self-referential plan could re-enter this operator.
         buffered = 0;
 
-        FilterProjectEngine.Execution execution = engine.execute();
+        GeneratedKernelEngine.Execution execution = engine.execute();
 
         long drainStart = System.nanoTime();
         int emitted = 0;
         int[] layout = spec.outputLayout();
         for (int i = 0; i < count; i++) {
-            if (spec.threshold() != null && !engine.selected(i)) {
+            if (!engine.selected(i)) {
                 continue;
             }
+            int computed = 0;
             for (int field = 0; field < layout.length; field++) {
                 if (layout[field] == GpuCalcSpec.COMPUTED) {
-                    outRow.setField(field, engine.projected(i));
+                    outRow.setField(field, engine.output(computed++, i));
                 } else {
                     passThrough[field].writeInto(outRow, field, i);
                 }

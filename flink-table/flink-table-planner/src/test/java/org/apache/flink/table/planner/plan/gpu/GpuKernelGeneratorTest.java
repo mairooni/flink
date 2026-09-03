@@ -18,6 +18,8 @@
 
 package org.apache.flink.table.planner.plan.gpu;
 
+import org.apache.flink.table.runtime.gpu.GpuKernelSource;
+
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.RexBuilder;

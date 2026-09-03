@@ -25,7 +25,7 @@ import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.planner.codegen.CalcCodeGenerator;
 import org.apache.flink.table.planner.codegen.CodeGeneratorContext;
 import org.apache.flink.table.planner.delegation.PlannerBase;
-import org.apache.flink.table.planner.plan.gpu.GpuCalcMatcher;
+import org.apache.flink.table.planner.plan.gpu.GpuKernelGenerator;
 import org.apache.flink.table.planner.plan.gpu.GpuOffloadAssignment;
 import org.apache.flink.table.planner.plan.gpu.GpuOffloadDecision;
 import org.apache.flink.table.planner.plan.gpu.GpuOffloadOptions;
@@ -38,6 +38,7 @@ import org.apache.flink.table.planner.plan.nodes.exec.SingleTransformationTransl
 import org.apache.flink.table.planner.plan.nodes.exec.utils.ExecNodeUtil;
 import org.apache.flink.table.planner.utils.JavaScalaConversionUtil;
 import org.apache.flink.table.runtime.gpu.GpuCalcSpec;
+import org.apache.flink.table.runtime.gpu.GpuKernelSource;
 import org.apache.flink.table.runtime.gpu.GpuOperatorFactoryProvider;
 import org.apache.flink.table.runtime.operators.CodeGenOperatorFactory;
 import org.apache.flink.table.runtime.typeutils.InternalTypeInfo;
@@ -156,21 +157,23 @@ public abstract class CommonExecCalc extends ExecNodeBase<RowData>
             recordGpuFallback(assignment, "no GpuOperatorFactoryProvider on the classpath");
             return null;
         }
-        Optional<GpuCalcSpec> spec =
-                GpuCalcMatcher.match(
-                        projection,
-                        condition,
-                        outputType,
-                        assignment.verdict().rowCost(),
-                        planner.getTableConfig().get(GpuOffloadOptions.BATCH_SIZE));
-        if (!spec.isPresent()) {
-            recordGpuFallback(assignment, "no kernel in the catalogue matches these expressions");
+        Optional<GpuKernelSource> kernel =
+                GpuKernelGenerator.generate(projection, condition, Integer.toString(getId()));
+        if (!kernel.isPresent()) {
+            recordGpuFallback(assignment, "expressions cannot be generated as a device kernel");
             return null;
         }
+        GpuCalcSpec spec =
+                new GpuCalcSpec(
+                        kernel.get(),
+                        kernel.get().outputLayout(),
+                        outputType,
+                        planner.getTableConfig().get(GpuOffloadOptions.BATCH_SIZE),
+                        assignment.verdict().rowCost());
         Optional<StreamOperatorFactory<RowData>> factory =
-                provider.get().createCalcOperatorFactory(spec.get());
+                provider.get().createCalcOperatorFactory(spec);
         if (!factory.isPresent()) {
-            recordGpuFallback(assignment, provider.get().describe() + " declined " + spec.get());
+            recordGpuFallback(assignment, provider.get().describe() + " declined " + spec);
             return null;
         }
         return factory.get();

@@ -482,9 +482,41 @@ that separation is what lets the runtime be absent. Compiling and running genera
 to the runtime module, which has TornadoVM but not Calcite. Neither module can do both, which is a
 consequence of the layering rather than an oversight.
 
-## Not yet wired in
+## Wired in: the thirteen shapes, re-measured
 
-`CommonExecCalc` still asks `GpuCalcMatcher` for a catalogue entry. Switching it to the generator
-means the runtime compiling `GpuKernelSource` at `open()` and building the task graph from the
-resulting `Method` — the next step, and the point at which the thirteen-shape table should be
-re-measured.
+`CommonExecCalc` now generates a kernel instead of matching a catalogue, and `GpuCalcMatcher` is
+gone. Re-running the same probe:
+
+| | shape | before | after |
+|---|---|---:|---:|
+| projection + filter, same column | | GPU | GPU |
+| projection only, no filter | | GPU | GPU |
+| filter on a different column | | cpu | **GPU** |
+| `WHERE val < 0.5` | | cpu | **GPU** |
+| two computed columns | | cpu | **GPU** |
+| `val*2.0-1.0` | | cpu | **GPU** |
+| `val/2.0` | | cpu | **GPU** |
+| `EXP(val)*LN(val)` | | cpu | **GPU** |
+| `ORDER BY` above the Calc | | GPU | GPU |
+| `n*2` on an INT column | | cpu | cpu |
+| DECIMAL / STRING | | cpu | cpu |
+| `SUM(val)` | | cpu | cpu |
+
+**Two of thirteen became nine of thirteen.** The four that still do not offload are the ones that
+should not: `DECIMAL` and `STRING` are not expressible on a device, `SUM` is an aggregate and only
+`Calc` opts in, and INT-only arithmetic produces an INT column the kernel cannot write — the kernel
+writes doubles, and returning a double where SQL says INTEGER would be wrong rather than slow.
+
+Correctness, not just planning. A query the catalogue could never express —
+`EXP(val/50000.0)*LN(val) + SIN(val)*COS(val) + POWER(val/1000.0,3.0), val/7.0 WHERE val > 2.0 AND
+val < 120000.0` — run with offload on and off over 120k rows: **239,994 values compared, 0
+non-finite, max relative error 0.00**, i.e. bit-identical to the CPU plan.
+
+### One thing the first run got wrong
+
+Compilation of the generated kernel failed with *"package uk.ac.manchester.tornado.api does not
+exist"*. The generated source was correct; the compile classpath was not. Under TornadoVM's launch
+configuration the API is on the JVM's **module** path, so `java.class.path` does not mention it.
+`GeneratedKernelEngine` now builds the compile classpath from the code-source locations of the very
+classes the kernel imports, which is where they actually came from whether that was the class path,
+the module path, or a user-code loader inside a TaskManager.

@@ -18,6 +18,8 @@
 
 package org.apache.flink.table.planner.plan.gpu;
 
+import org.apache.flink.table.runtime.gpu.GpuKernelSource;
+
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
@@ -94,6 +96,12 @@ public final class GpuKernelGenerator {
 
     private static final String INDENT = "        ";
 
+    /**
+     * Mirrors {@code GpuCalcSpec.COMPUTED}. Duplicated rather than imported so the generator has no
+     * reason to reach into the runtime module beyond the value object it produces.
+     */
+    private static final int OUTPUT_COMPUTED = -1;
+
     private GpuKernelGenerator() {}
 
     /**
@@ -113,11 +121,15 @@ public final class GpuKernelGenerator {
         // Only referenced columns are staged; a projected-through column stays on the host.
         final Map<Integer, String> inputs = new LinkedHashMap<>();
         final List<String> computed = new ArrayList<>();
+        final int[] layout = new int[projection.size()];
 
-        for (RexNode expr : projection) {
+        for (int field = 0; field < projection.size(); field++) {
+            RexNode expr = projection.get(field);
             if (expr instanceof RexInputRef) {
+                layout[field] = ((RexInputRef) expr).getIndex();
                 continue;
             }
+            layout[field] = OUTPUT_COMPUTED;
             if (!isDoubleResult(expr)) {
                 return Optional.empty();
             }
@@ -160,7 +172,8 @@ public final class GpuKernelGenerator {
                         source,
                         inputFields,
                         computed.size(),
-                        renderedCondition != null));
+                        renderedCondition != null,
+                        layout));
     }
 
     private static String renderClass(

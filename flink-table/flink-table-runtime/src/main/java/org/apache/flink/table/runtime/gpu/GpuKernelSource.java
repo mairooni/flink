@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.table.planner.plan.gpu;
+package org.apache.flink.table.runtime.gpu;
 
 import java.io.Serializable;
 import java.util.Arrays;
@@ -43,6 +43,7 @@ public final class GpuKernelSource implements Serializable {
     private final int[] inputFieldIndexes;
     private final int outputCount;
     private final boolean hasFilter;
+    private final int[] outputLayout;
 
     public GpuKernelSource(
             String className,
@@ -50,13 +51,15 @@ public final class GpuKernelSource implements Serializable {
             String source,
             int[] inputFieldIndexes,
             int outputCount,
-            boolean hasFilter) {
+            boolean hasFilter,
+            int[] outputLayout) {
         this.className = className;
         this.methodName = methodName;
         this.source = source;
         this.inputFieldIndexes = inputFieldIndexes;
         this.outputCount = outputCount;
         this.hasFilter = hasFilter;
+        this.outputLayout = outputLayout;
     }
 
     public String className() {
@@ -91,6 +94,14 @@ public final class GpuKernelSource implements Serializable {
      */
     public boolean hasFilter() {
         return hasFilter;
+    }
+
+    /**
+     * For each output field, the input field it is copied from, or {@code GpuCalcSpec.COMPUTED} for
+     * one the kernel produces.
+     */
+    public int[] outputLayout() {
+        return outputLayout;
     }
 
     @Override
