@@ -345,3 +345,67 @@ LIB=<flink-dist>/lib                 # excluding flink-table-planner-loader
 java "@$D/tornado-argfile" -cp "<runtime classes>:<resources>:<forked planner jar>:$LIB/*" \
      org.apache.flink.table.gpu.EndToEnd 200000
 ```
+
+---
+
+# The kernel catalogue does not scale, and what to do about it
+
+Probing the planner with thirteen query shapes, two offload:
+
+| | shape | verdict |
+|---|---|---|
+| GPU | `SELECT id, val*2.0+1.0 WHERE val > 0.5` | 3 ops/row, clears floor |
+| GPU | `SELECT id, val*2.0+1.0` | 2 ops/row, clears floor |
+| cpu | filter on a different column than the projection | no kernel matches |
+| cpu | `WHERE val < 0.5` | no kernel matches |
+| cpu | two computed columns | no kernel matches |
+| cpu | `val*2.0-1.0` | no kernel matches |
+| cpu | `val/2.0` | no kernel matches |
+| cpu | `EXP(val)*LN(val)` | no kernel matches |
+| cpu | `n*2` on INT | provider declined; the kernel writes DOUBLE |
+| cpu | DECIMAL / STRING | not expressible on device |
+| cpu | `SUM(val)` | only Calc opts in |
+
+The cost gate and the catalogue barely intersect: everything worth offloading has no kernel, and
+the one kernel that exists is below the calibrated floor. Adding shapes by hand does not fix this —
+the space of expressions is unbounded.
+
+## Runtime kernel generation works (spike)
+
+`spike/RuntimeKernelSpike` generates a kernel for an arbitrary expression, compiles it at runtime,
+and runs it on the device. `EXP(v)*LN(v) + SIN(v)*COS(v)`, which has no catalogue entry:
+
+```
+javac available at runtime: true
+elements=1024  compared=1024  non_finite=0  mismatches=0  max_rel_err=5.26e-15
+ARBITRARY EXPRESSION RAN ON THE DEVICE, generated and compiled at runtime
+```
+
+The obstacle was always that TornadoVM resolves a kernel from its method reference's
+`SerializedLambda`, which needs a `writeReplace()` only `javac` emits — so Janino-generated classes
+are unusable, and that is what forced a fixed catalogue.
+
+**The compiler does not have to be Janino.** The spike generates one compilation unit holding both
+the kernel *and* the code that builds the `TaskGraph` referencing it, then compiles it with the
+real `javac` through `javax.tools`. The method reference is then an ordinary javac lambda with a
+proper `writeReplace`, and TornadoVM accepts it.
+
+### What this costs
+
+- **A JDK, not a JRE**, at run time: `ToolProvider.getSystemJavaCompiler()` returns null on a JRE.
+  Not a new constraint here — TornadoVM already requires a JVMCI-enabled JDK.
+- **javac is slower than Janino.** Paid once per distinct expression per TaskManager, alongside
+  TornadoVM's own kernel compilation, not per batch.
+- **Generated names must avoid OpenCL keywords.** The first spike run failed with *"Java method
+  name corresponds to an OpenCL Token. Change the Java method's name: kernel"*. Any generator needs
+  a reserved-word list.
+- Generated classes need `--enable-preview -source 21`, since the kernel touches TornadoVM's
+  off-heap array types.
+
+### The alternative worth asking about upstream
+
+TornadoVM could accept a `java.lang.reflect.Method` directly instead of only a lambda.
+`TaskUtils.resolveMethodHandle` currently goes straight to `resolveViaSerializedLambda` and its
+comment says there is no runtime fallback. An overload taking a `Method` would remove the
+constraint at its source and make the generator simpler — only the kernel would need generating,
+not the graph-building class around it.
