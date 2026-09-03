@@ -166,6 +166,13 @@ public final class GeneratedKernelEngine implements AutoCloseable {
                                 "21",
                                 "-target",
                                 "21",
+                                // Debug info is not optional. @Parallel is a local-variable
+                                // annotation, and TornadoVM associates it with the loop induction
+                                // variable through the local variable table. Without -g javac emits
+                                // no such table, the annotation is silently ignored, and the kernel
+                                // is generated as a sequential loop that every GPU thread runs in
+                                // full -- correct results, catastrophically slow, and no warning.
+                                "-g",
                                 "-nowarn"));
         options.add(source.toString());
 
@@ -269,9 +276,29 @@ public final class GeneratedKernelEngine implements AutoCloseable {
 
     public Execution execute() {
         long t0 = System.nanoTime();
-        TornadoExecutionResult result = plan.execute();
+        TornadoExecutionResult result = withKernelLoader(plan::execute);
         long wall = System.nanoTime() - t0;
         return new Execution(wall, profile ? result.getProfilerResult() : null);
+    }
+
+    /**
+     * Runs {@code action} with the generated kernel's loader as the context class loader.
+     *
+     * <p>TornadoVM finds a kernel's {@code @Parallel} annotations by reading its class file as a
+     * resource. A class compiled at run time lives in a loader of our making, so unless that loader
+     * is reachable the annotation scan comes up empty -- and the failure is silent: the kernel is
+     * emitted as a sequential loop which every device thread runs in full, giving correct results
+     * about a thousand times slower than it should.
+     */
+    private <T> T withKernelLoader(java.util.function.Supplier<T> action) {
+        Thread current = Thread.currentThread();
+        ClassLoader previous = current.getContextClassLoader();
+        current.setContextClassLoader(loader);
+        try {
+            return action.get();
+        } finally {
+            current.setContextClassLoader(previous);
+        }
     }
 
     public void recordBatch(

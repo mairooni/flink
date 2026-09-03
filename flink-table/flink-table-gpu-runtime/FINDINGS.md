@@ -520,3 +520,83 @@ configuration the API is on the JVM's **module** path, so `java.class.path` does
 `GeneratedKernelEngine` now builds the compile classpath from the code-source locations of the very
 classes the kernel imports, which is where they actually came from whether that was the class path,
 the module path, or a user-code loader inside a TaskManager.
+
+
+---
+
+# Intensity sweep through generated kernels
+
+Re-running the calibration against real generated kernels rather than the synthetic knob.
+4M rows, batch 262,144, RTX 4070. `gpu_ms` is everything the offload costs: gather, copy-in,
+kernel, copy-out, drain.
+
+| terms | weighted ops/row | cpu_ms | gpu_ms | speedup | kernel_ms |
+|------:|-----------------:|-------:|-------:|--------:|----------:|
+| 0 | 3 | 5 | 49 | 0.11× | 0.3 |
+| 1 | 47 | 56 | 16 | **3.54×** | 1.6 |
+| 2 | 91 | 132 | 19 | **7.01×** | 3.7 |
+| 4 | 179 | 266 | 20 | **13.42×** | 5.7 |
+| 8 | 355 | 546 | 25 | **21.62×** | 11.1 |
+| 16 | 707 | — | — | failed | — |
+
+Break-even, interpolating between 3 and 47, is around **17 weighted ops/row**.
+
+## The floor of 96 is far too conservative — and worse, it is not a constant
+
+The shipped default came from the synthetic sweep and put break-even near 70. This one puts it near
+17. Both were measured on the same GPU, so the difference is not the device: the two sweeps use
+different arithmetic. The synthetic kernel was `sqrt`-heavy; this one is `sin`/`cos`-heavy, and the
+CPU is relatively much worse at transcendentals than at `sqrt` while the GPU is not.
+
+**The cost floor therefore cannot be a single number calibrated once.** `OperatorWeights` assigns
+ordinal weights that stand in for device work, but break-even depends on the *ratio* of CPU cost to
+GPU cost, and that ratio differs per function. A floor of 96 rejects everything between 17 and 96,
+which here is 3.5× to 7× of real speedup thrown away.
+
+This is a genuine limitation of the model as designed, not a calibration error, and it should be
+recorded as such. The options are a per-function CPU/GPU cost ratio rather than one ordinal weight,
+or a floor set low enough to be safe across shapes and accepting occasional small regressions.
+
+## Large expressions fail, and fail silently
+
+At 16 terms (707 weighted) the kernel does not run:
+
+```
+[TornadoVM-OpenCL] asynchronous error: CL_OUT_OF_RESOURCES error executing
+CL_COMMAND_NDRANGE_KERNEL on NVIDIA GeForce RTX 4070 Laptop GPU (Device 0).
+```
+
+Reducing the batch from 262,144 to 16,384 does not help, so it is per-thread register pressure from
+the size of the expression rather than the number of threads.
+
+**The error is asynchronous and nothing checks it.** The run reported `kernel_ms=0.0` and a speedup
+of 81× — for work that never happened. An offload path that cannot tell a failed kernel from a fast
+one is not safe to enable, so detecting this is a prerequisite to any performance claim, and the
+generator likely needs an expression-size ceiling alongside the cost floor.
+
+## A silent 1000× slowdown found on the way
+
+The first run of this sweep reported the GPU getting *slower* as intensity rose: 49 s of kernel time
+for 4M rows at 16 terms. The kernel was correct but sequential —
+
+```c
+i_3 = 0;
+for (; i_3 < 262144;) { ... i_11 = i_3 + 1; ... }     // no get_global_id
+```
+
+`@Parallel` had been dropped. `ASMClassVisitor.getParallelAnnotations` located the kernel's class
+file through `ClassLoader.getSystemClassLoader()`, which cannot see a class generated and loaded at
+run time. Finding no annotations is not an error there — a class legitimately may have none — so
+every device thread executed the whole loop, giving correct results about a thousand times slower
+than it should.
+
+Fixed in TornadoVM by looking through the declaring class's own loader first, which is what
+`ReflectionUniverse` already does when it reads the same class's bytecode. The two had to agree: a
+kernel whose bytecode could be read was still losing its annotations. The context class loader is
+not a substitute, because annotation lookup runs on a sketcher worker thread that does not inherit
+the submitting thread's.
+
+**This invalidates the earlier spike result as a performance claim.** `RuntimeKernelSpike` reported
+`max_rel_err=5.26e-15` and "ran on the device", which was true — but it was running sequentially,
+and nothing in the output would have revealed it. Correctness was never in question; the speed
+implied by "ran on the device" was.
