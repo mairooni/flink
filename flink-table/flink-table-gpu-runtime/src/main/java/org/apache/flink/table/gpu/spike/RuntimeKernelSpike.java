@@ -18,6 +18,11 @@
 
 package org.apache.flink.table.gpu.spike;
 
+import uk.ac.manchester.tornado.api.TaskGraph;
+import uk.ac.manchester.tornado.api.TornadoExecutionPlan;
+import uk.ac.manchester.tornado.api.enums.DataTransferMode;
+import uk.ac.manchester.tornado.api.types.arrays.DoubleArray;
+
 import javax.tools.JavaCompiler;
 import javax.tools.ToolProvider;
 
@@ -85,8 +90,30 @@ public class RuntimeKernelSpike {
                         new URL[] {dir.toUri().toURL()},
                         RuntimeKernelSpike.class.getClassLoader())) {
             Class<?> generated = loader.loadClass("GeneratedKernel");
-            Method run = generated.getMethod("runOnDevice", int.class);
-            double[] out = (double[]) run.invoke(null, 1024);
+            Method kernel = generated.getMethod("evaluate", DoubleArray.class, DoubleArray.class);
+
+            int n = 1024;
+            DoubleArray in = new DoubleArray(n);
+            DoubleArray result = new DoubleArray(n);
+            for (int i = 0; i < n; i++) {
+                in.set(i, 0.1 + i * (10.0 / n));
+            }
+            result.init(0.0);
+
+            // The kernel is named directly: no lambda, so nothing here had to be generated.
+            TaskGraph graph =
+                    new TaskGraph("gen")
+                            .transferToDevice(DataTransferMode.EVERY_EXECUTION, in)
+                            .task("t", kernel, in, result)
+                            .transferToHost(DataTransferMode.EVERY_EXECUTION, result);
+            try (TornadoExecutionPlan plan = new TornadoExecutionPlan(graph.snapshot())) {
+                plan.execute();
+            }
+
+            double[] out = new double[n];
+            for (int i = 0; i < n; i++) {
+                out[i] = result.get(i);
+            }
 
             // Verify against the host computing the same expression.
             int wrong = 0;
@@ -123,10 +150,7 @@ public class RuntimeKernelSpike {
         return all.toArray(new String[0]);
     }
 
-    /**
-     * The generated unit holds the kernel AND the TaskGraph that references it, so the method
-     * reference is compiled by javac in the same pass and carries writeReplace().
-     */
+    /** The generated unit is now only the kernel; the graph is built by the caller. */
     private static String source(String expression) {
         return ""
                 + "import uk.ac.manchester.tornado.api.*;\n"
@@ -146,22 +170,6 @@ public class RuntimeKernelSpike {
                 + "        }\n"
                 + "    }\n"
                 + "\n"
-                + "    public static double[] runOnDevice(int n) throws Exception {\n"
-                + "        DoubleArray in = new DoubleArray(n);\n"
-                + "        DoubleArray out = new DoubleArray(n);\n"
-                + "        for (int i = 0; i < n; i++) { in.set(i, 0.1 + i * (10.0 / n)); }\n"
-                + "        out.init(0.0);\n"
-                + "        TaskGraph g = new TaskGraph(\"gen\")\n"
-                + "                .transferToDevice(DataTransferMode.EVERY_EXECUTION, in)\n"
-                + "                .task(\"t\", GeneratedKernel::evaluate, in, out)\n"
-                + "                .transferToHost(DataTransferMode.EVERY_EXECUTION, out);\n"
-                + "        try (TornadoExecutionPlan p = new TornadoExecutionPlan(g.snapshot())) {\n"
-                + "            p.execute();\n"
-                + "        }\n"
-                + "        double[] r = new double[n];\n"
-                + "        for (int i = 0; i < n; i++) { r[i] = out.get(i); }\n"
-                + "        return r;\n"
-                + "    }\n"
                 + "}\n";
     }
 }

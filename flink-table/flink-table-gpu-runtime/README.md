@@ -26,9 +26,9 @@ installed locally first or the reactor will fail to resolve them:
 ```bash
 D=$TORNADO_SDK/share/java/tornado
 for a in tornado-api tornado-annotation; do
-  mvn install:install-file -Dfile=$D/$a-6.0.1-dev.jar \
+  mvn install:install-file -Dfile=$D/$a-6.0.1-jdk21-dev.jar \
     -DgroupId=uk.ac.manchester.tornado -DartifactId=$a \
-    -Dversion=6.0.1-dev -Dpackaging=jar
+    -Dversion=6.0.1-jdk21-dev -Dpackaging=jar
 done
 
 mvn clean package -DskipTests
