@@ -19,18 +19,13 @@ and a cluster without this jar simply runs everything on the CPU.
 
 ## Building
 
-Part of the default build. TornadoVM is not published to Maven Central, so its API jars must be
-installed locally first or the reactor will fail to resolve them:
+Part of the default build. TornadoVM is not published to Maven Central, so build a TornadoVM
+distribution first -- its own build installs `tornado-api` and `tornado-annotation` into the local
+repository under the coordinates this module asks for, and nothing else is needed:
 
 ```bash
-D=$TORNADO_SDK/share/java/tornado
-for a in tornado-api tornado-annotation; do
-  mvn install:install-file -Dfile=$D/$a-6.0.1-jdk21-dev.jar \
-    -DgroupId=uk.ac.manchester.tornado -DartifactId=$a \
-    -Dversion=6.0.1-jdk21-dev -Dpackaging=jar
-done
-
-mvn clean package -DskipTests
+cd $TORNADOVM_ROOT && bin/compile --jdk jdk21 --sdk --backend cuda
+cd $FLINK_ROOT     && ./mvnw clean install -DskipTests -Djdk21 -Pjava21-target
 ```
 
 No profile or extra argument is needed. The module was originally behind a `-Pgpu` profile; that
