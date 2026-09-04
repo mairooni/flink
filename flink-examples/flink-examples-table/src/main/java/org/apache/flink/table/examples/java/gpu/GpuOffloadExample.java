@@ -170,7 +170,7 @@ public final class GpuOffloadExample {
         // differ between the two runs and make the comparison meaningless.
         env.executeSql(
                 "CREATE TABLE Measurements (\n"
-                        + "  id BIGINT,\n"
+                        + "  id INT,\n"
                         + "  val DOUBLE\n"
                         + ") WITH (\n"
                         + "  'connector' = 'datagen',\n"
@@ -218,7 +218,7 @@ public final class GpuOffloadExample {
         try (CloseableIterator<Row> rows0 = env.sqlQuery(query).execute().collect()) {
             rows0.forEachRemaining(result::add);
         }
-        result.sort(Comparator.comparingLong(row -> (Long) row.getField(0)));
+        result.sort(Comparator.comparingInt(row -> (Integer) row.getField(0)));
         return new Run(result, plan);
     }
 
