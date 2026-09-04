@@ -23,6 +23,9 @@ import org.apache.flink.table.api.TableEnvironment;
 import org.apache.flink.types.Row;
 import org.apache.flink.util.CloseableIterator;
 
+import java.nio.file.Files;
+import java.nio.file.Paths;
+
 /**
  * End-to-end benchmark: great-circle distance over a Parquet table, with and without GPU offload.
  *
@@ -87,6 +90,14 @@ public final class HaversineBenchmark {
             return;
         }
 
+        // Generate on demand rather than failing inside the file source, which reports only
+        // "Could not enumerate file splits" and says nothing about what should have created the
+        // directory. Running this class straight from an IDE, with no arguments, should work.
+        if (!Files.isDirectory(Paths.get(parsed.data))) {
+            System.out.printf("%s does not exist yet%n", parsed.data);
+            generate(parsed);
+        }
+
         System.out.printf(
                 "data=%s  parallelism=%s  gpu=%s  runs=%d  depots=%d%n",
                 parsed.data,
@@ -106,15 +117,38 @@ public final class HaversineBenchmark {
             System.out.printf("run %2d  %10.0f ms  %s%n", run, millis, seen);
             if (result == null) {
                 result = seen;
-            } else if (!result.equals(seen)) {
-                throw new IllegalStateException(
-                        "runs disagree: "
-                                + result
-                                + " then "
-                                + seen
-                                + "; the result must not "
-                                + "depend on whether the query ran on the GPU");
+            } else {
+                agree(result, seen);
             }
+        }
+    }
+
+    /**
+     * Checks two runs agree, to within floating-point reassociation.
+     *
+     * <p>Not bit-for-bit: {@code SUM} over a parallel plan combines partial sums in whatever order
+     * the subtasks finish, and floating-point addition is not associative, so the last bits of the
+     * total move between runs at parallelism above one. The device reassociates differently again.
+     * A tolerance is the honest check here; exact equality would fail on correct results and say
+     * nothing about the ones that matter.
+     */
+    private static void agree(Row first, Row second) {
+        if (!first.getField(0).equals(second.getField(0))) {
+            throw new IllegalStateException(
+                    "runs saw different row counts: " + first + " then " + second);
+        }
+        double a = ((Number) first.getField(1)).doubleValue();
+        double b = ((Number) second.getField(1)).doubleValue();
+        double relative = a == 0.0 ? Math.abs(b) : Math.abs((a - b) / a);
+        if (relative > 1e-12) {
+            throw new IllegalStateException(
+                    "runs disagree by "
+                            + relative
+                            + " relative: "
+                            + first
+                            + " then "
+                            + second
+                            + "; that is far beyond floating-point reassociation");
         }
     }
 
@@ -273,7 +307,13 @@ public final class HaversineBenchmark {
 
     /** Command line, in the shape the run scripts use. */
     private static final class Args {
-        private String data = "/tmp/flink-gpu-points";
+        /**
+         * Where the input lives. Left null so the default can depend on {@code rows} and {@code
+         * format}, which are parsed from the same command line -- and so that it matches what
+         * run-haversine.sh writes, rather than being a second name for the same thing.
+         */
+        private String data;
+
         private int rows = 2_000_000;
         private int parallelism = -1;
         private int runs = 10;
@@ -311,6 +351,9 @@ public final class HaversineBenchmark {
                 } else {
                     throw new IllegalArgumentException("unknown argument " + flag);
                 }
+            }
+            if (args.data == null) {
+                args.data = "/tmp/flink-gpu-points-" + args.rows + "-" + args.format;
             }
             return args;
         }
