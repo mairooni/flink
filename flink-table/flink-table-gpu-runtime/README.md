@@ -102,9 +102,23 @@ Measured on an RTX 4070 Laptop, 2M rows at parallelism 1 with the csv source:
 established: reading and counting alone costs about 1000 ms, so at one depot the expression is 19%
 of the job and at twenty it is 93%.
 
+That table was taken in one sitting. Repeated later on a busier machine every absolute number
+roughly doubled -- baseline 2180 ms, CPU 34900 ms, GPU 2440 ms -- but the ratio held at 14.3x,
+because both sides move together. The governor here is `powersave`, so **only compare runs measured
+back to back in the same cluster session**; numbers from different sittings are not comparable, and
+neither are A/B variants that required a TaskManager restart between them.
+
 The operator's own breakdown moves the same way. At one depot the drain is 72% of its time and the
-kernel 20%; at twenty the kernel is 83% and the drain 15%. The drain is a fixed per-row cost, so
-intensity dilutes it -- but it is the next thing to attack, since it boxes every value it emits.
+kernel 20%; at twenty the kernel is 83% and the drain 15%.
+
+That 72% is a misleading denominator, though, and worth not being fooled by: the operator is about
+160 ms of a job whose other 2200 ms is reading the input, so the drain is under 2% of the job at
+either setting. Replacing its `GenericRowData` with the `BoxedWrapperRowData` that Flink's own Calc
+emits -- trading a boxed `Double` per value for a reused mutable wrapper -- was measured and made no
+difference. The allocations are short-lived and die in the young generation; the wrapper trades them
+for an array read, a checkcast and a null check. The change was reverted.
+
+What is left to attack is the source, which is 89% of the offloaded job.
 
 Results agree between the two paths to 2 ULP. They are not bit-identical and should not be expected
 to be: the device reassociates floating-point arithmetic differently.
