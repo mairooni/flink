@@ -145,6 +145,13 @@ mvn -o -q dependency:build-classpath -Dmdep.outputFile=$PWD/target/cp.txt \
 ./scripts/run-harness.sh org.apache.flink.table.gpu.Harness 8000000 262144
 ```
 
+> **`Harness` no longer exists.** It drove `FilterProjectEngine`, the fixed two-kernel catalogue
+> that runtime generation replaced, and both were removed once nothing on the query path used them.
+> The numbers above stand as recorded; the command does not run. `GeneratedKernelSweep` is the
+> equivalent for kernel intensity. The gather-tier comparison has no replacement yet — when the
+> bulk path is wired into `GpuCalcOperator` it should be measured against the operator itself
+> rather than a standalone harness, which is what the operator actually does.
+
 ---
 
 # Follow-up experiments

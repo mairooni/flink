@@ -74,7 +74,7 @@ public class TornadoGpuOperatorFactoryProvider implements GpuOperatorFactoryProv
         try {
             // Loading the class is the check; it drags in DoubleArray and IntArray.
             Class.forName(
-                    "org.apache.flink.table.gpu.operator.FilterProjectEngine",
+                    "org.apache.flink.table.gpu.operator.GeneratedKernelEngine",
                     false,
                     TornadoGpuOperatorFactoryProvider.class.getClassLoader());
             return null;

@@ -53,9 +53,9 @@ import java.util.stream.Stream;
 /**
  * Compiles a generated kernel and runs it over batches of staged columns.
  *
- * <p>Replaces the fixed-shape {@code FilterProjectEngine}: the kernel is no longer one of a few
- * hand-written methods but Java source produced from the query's own expressions, compiled once per
- * operator instance.
+ * <p>The kernel is not one of a few hand-written methods but Java source produced from the query's
+ * own expressions, compiled once per operator instance. It replaced an earlier fixed catalogue that
+ * could express 2 of the 13 shapes tested; generation covers 9.
  *
  * <h2>Why javac and a directory</h2>
  *
