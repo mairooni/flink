@@ -100,8 +100,9 @@ elif [[ -n "${PARQUET_JAR}" && -f "${PARQUET_JAR}" ]]; then
     cp "${PARQUET_JAR}" "${FLINK_HOME}/lib/"
     echo "installed $(basename "${PARQUET_JAR}") into lib/"
 else
-    echo "flink-sql-parquet jar not found; set PARQUET_JAR or build flink-formats/flink-sql-parquet" >&2
-    exit 1
+    # Not fatal: the benchmark reads csv by default, and csv ships in lib/ already. Only a
+    # FORMAT=parquet run needs this, and that needs Hadoop on the classpath as well.
+    echo "note: no flink-sql-parquet jar found; csv will work, parquet will not" >&2
 fi
 
 # Flatten the argfile into one line. Comments and blank lines go; everything else is a JVM flag.
