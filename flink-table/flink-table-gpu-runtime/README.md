@@ -74,14 +74,39 @@ scripts/gpu-cluster-setup.sh "$DIST"    # gpu-runtime opt/ -> lib/, TornadoVM fl
 scripts/run-haversine.sh    "$DIST" 50000000 1 10
 ```
 
-`run-haversine.sh` starts the cluster, writes the input to Parquet once if it is not already
-there, then runs the query ten times with offload off and ten times with it on, through
-`bin/flink run` exactly as a user would.
+`run-haversine.sh` starts the cluster, writes the input once if it is not already there, then runs
+the query ten times with offload off and ten times with it on, through `bin/flink run` exactly as a
+user would.
 
-Two choices in there are not incidental. The source is **Parquet, not `datagen`**: generating rows
-costs about 100 us each, which buries the operator whatever the kernel does, and Parquet also hands
-the operator `ColumnarRowData`, the layout the columnar gather exists for. The expression is
-**haversine**, which the estimator weighs well above the default floor -- unlike `val * 2.0 + 1.0`,
-which is below it and has nothing for the GPU to win back.
+The query is **distance to the nearest of twenty reference points** -- what a logistics or retail
+system asks of an address table. Two things about that are not incidental.
+
+The input is read from a **file, not `datagen`**, which costs about 100 us per row and buries the
+operator whatever the kernel does. Format is a parameter: `csv` by default because it works against
+an unmodified distribution, `parquet` when Hadoop is on the cluster classpath, which hands the
+operator `ColumnarRowData` and the columnar gather with it.
+
+And the arithmetic has to be **worth offloading**. One distance is about 173 weighted ops against a
+floor of 96 -- it clears the gate, but it is only a fifth of the job's wall time, so Amdahl caps the
+whole query near 1.2x however fast the device is. Twenty of them is 3458 weighted ops with the input
+still read once and still one output column.
+
+Measured on an RTX 4070 Laptop, 2M rows at parallelism 1 with the csv source:
+
+| depots | weighted ops/row | CPU | GPU | end to end |
+|---|---|---|---|---|
+| 1 | 173 | 1230 ms | 1070 ms | 1.15x |
+| 20 | 3458 | 15400 ms | 1150 ms | 13.4x |
+
+`--baseline` runs the same job with the arithmetic removed, which is how those shares were
+established: reading and counting alone costs about 1000 ms, so at one depot the expression is 19%
+of the job and at twenty it is 93%.
+
+The operator's own breakdown moves the same way. At one depot the drain is 72% of its time and the
+kernel 20%; at twenty the kernel is 83% and the drain 15%. The drain is a fixed per-row cost, so
+intensity dilutes it -- but it is the next thing to attack, since it boxes every value it emits.
+
+Results agree between the two paths to 2 ULP. They are not bit-identical and should not be expected
+to be: the device reassociates floating-point arithmetic differently.
 
 `FINDINGS.md` has the measurements behind the cost floor.

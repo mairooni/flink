@@ -70,10 +70,10 @@ public final class HaversineBenchmark {
     /** Mean Earth radius in km, doubled — the 2r of the haversine formula. */
     private static final String DIAMETER = "12742.0";
 
-    /** Reference point the distance is measured from: Manchester. */
-    private static final String LAT0 = "53.4808";
+    /** Reference point a single-depot run measures from: Manchester. */
+    private static final double LAT0 = 53.4808;
 
-    private static final String LON0 = "-2.2426";
+    private static final double LON0 = -2.2426;
 
     public static void main(String[] args) throws Exception {
         final Args parsed = Args.parse(args);
@@ -84,11 +84,15 @@ public final class HaversineBenchmark {
         }
 
         System.out.printf(
-                "data=%s  parallelism=%s  gpu=%s  runs=%d%n",
+                "data=%s  parallelism=%s  gpu=%s  runs=%d  depots=%d%n",
                 parsed.data,
                 parsed.parallelism > 0 ? Integer.toString(parsed.parallelism) : "(default)",
                 parsed.gpu,
-                parsed.runs);
+                parsed.runs,
+                parsed.depots);
+        if (parsed.baseline) {
+            System.out.println("baseline: reading and counting only, no haversine");
+        }
 
         Row result = null;
         for (int run = 1; run <= parsed.runs; run++) {
@@ -149,14 +153,23 @@ public final class HaversineBenchmark {
             env.getConfig().getConfiguration().setString("table.exec.gpu-offload.enabled", "true");
         }
 
+        // Reading and counting, with almost no arithmetic: everything the job costs that is not the
+        // expression. Subtracting it from a full run is what separates the operator from the
+        // source, and so what says whether a speedup on the operator can show up end to end.
+        //
+        // It sums lat + lon rather than lat alone so that both columns are read: the filesystem
+        // source pushes projection down, and a baseline touching one column would understate what
+        // the real query pays to read its input.
         final String query =
-                "SELECT COUNT(*) AS rows_seen, SUM(km) AS total_km\n"
-                        + "FROM (\n"
-                        + "  SELECT "
-                        + haversine()
-                        + " AS km\n"
-                        + "  FROM Points\n"
-                        + ")";
+                args.baseline
+                        ? "SELECT COUNT(*) AS rows_seen, SUM(lat + lon) AS total_km FROM Points"
+                        : "SELECT COUNT(*) AS rows_seen, SUM(km) AS total_km\n"
+                                + "FROM (\n"
+                                + "  SELECT "
+                                + nearest(args.depots)
+                                + " AS km\n"
+                                + "  FROM Points\n"
+                                + ")";
 
         if (args.explain) {
             System.out.println(env.explainSql(query));
@@ -171,16 +184,40 @@ public final class HaversineBenchmark {
     }
 
     /**
-     * Great-circle distance from ({@link #LAT0}, {@link #LON0}), as a single expression.
+     * Distance to the nearest of {@code n} reference points, as a single expression.
      *
-     * <p>Written without {@code RADIANS} — the kernel generator maps a fixed set of functions onto
+     * <p>With {@code n == 1} this is a plain great-circle distance. Above that it is the query a
+     * logistics or retail system actually asks -- how far is each address from its nearest depot --
+     * and it is the reason this benchmark can show anything end to end. One haversine is about 173
+     * weighted ops against a floor of 96, but it is only a fifth of the job's wall time, so Amdahl
+     * caps the whole query at about 1.2x however fast the device is. Twenty of them, with the input
+     * read exactly once and still a single output column, moves the arithmetic to where the
+     * measurement can see it.
+     *
+     * <p>Written without {@code RADIANS} -- the kernel generator maps a fixed set of functions onto
      * {@code TornadoMath} and that is not among them, whereas multiplying by a literal is.
      */
-    private static String haversine() {
+    private static String nearest(int n) {
+        if (n == 1) {
+            return haversine(LAT0, LON0);
+        }
+        StringBuilder sb = new StringBuilder("LEAST(");
+        for (int i = 0; i < n; i++) {
+            if (i > 0) {
+                sb.append(",\n         ");
+            }
+            // A deterministic spread rather than a table of real cities: the point is the
+            // arithmetic, and every run has to compare against the same numbers.
+            sb.append(haversine(-60.0 + i * (120.0 / n), -180.0 + i * (360.0 / n)));
+        }
+        return sb.append(")").toString();
+    }
+
+    private static String haversine(double lat0Deg, double lon0Deg) {
         final String lat = "(lat * " + TO_RAD + ")";
         final String lon = "(lon * " + TO_RAD + ")";
-        final String lat0 = "(" + LAT0 + " * " + TO_RAD + ")";
-        final String lon0 = "(" + LON0 + " * " + TO_RAD + ")";
+        final String lat0 = "(" + lat0Deg + " * " + TO_RAD + ")";
+        final String lon0 = "(" + lon0Deg + " * " + TO_RAD + ")";
         return DIAMETER
                 + " * ASIN(SQRT("
                 + "POWER(SIN(("
@@ -240,6 +277,8 @@ public final class HaversineBenchmark {
         private boolean gpu;
         private boolean generate;
         private boolean explain;
+        private boolean baseline;
+        private int depots = 1;
 
         static Args parse(String[] argv) {
             Args args = new Args();
@@ -259,6 +298,10 @@ public final class HaversineBenchmark {
                     args.gpu = Boolean.parseBoolean(argv[++i]);
                 } else if ("--generate".equals(flag)) {
                     args.generate = true;
+                } else if ("--depots".equals(flag)) {
+                    args.depots = Integer.parseInt(argv[++i]);
+                } else if ("--baseline".equals(flag)) {
+                    args.baseline = true;
                 } else if ("--explain".equals(flag)) {
                     args.explain = true;
                 } else {

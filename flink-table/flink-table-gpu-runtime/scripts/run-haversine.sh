@@ -24,6 +24,9 @@
 # operator no matter how fast the kernel is.
 #
 # Usage: run-haversine.sh <flink-dist-dir> [rows] [parallelism] [runs]
+#   DEPOTS sets how many reference points the nearest-of query compares against (20 by default).
+#   One depot is a plain distance, which is only about a fifth of the job's wall time and so
+#   caps the whole query near 1.2x however fast the device is.
 #   TORNADOVM_HOME must point at a built TornadoVM SDK; run gpu-cluster-setup.sh first.
 #   FORMAT selects the input format (csv by default; parquet needs Hadoop on the cluster
 #   classpath, which the distribution does not ship).
@@ -34,6 +37,7 @@ FLINK_HOME="${1:-}"
 ROWS="${2:-50000000}"
 PARALLELISM="${3:-1}"
 RUNS="${4:-10}"
+DEPOTS="${DEPOTS:-20}"
 FORMAT="${FORMAT:-csv}"
 DATA="${DATA:-/tmp/flink-gpu-points-${ROWS}-${FORMAT}}"
 
@@ -63,11 +67,12 @@ fi
 
 for gpu in false true; do
     echo
-    echo "############ gpu=${gpu}  rows=${ROWS}  parallelism=${PARALLELISM}  format=${FORMAT} ############"
+    echo "############ gpu=${gpu}  rows=${ROWS}  parallelism=${PARALLELISM}  format=${FORMAT}  depots=${DEPOTS} ############"
     "${FLINK_HOME}/bin/flink" run "${JAR}" \
         --data "${DATA}" \
         --parallelism "${PARALLELISM}" \
         --runs "${RUNS}" \
         --format "${FORMAT}" \
+        --depots "${DEPOTS}" \
         --gpu "${gpu}"
 done
