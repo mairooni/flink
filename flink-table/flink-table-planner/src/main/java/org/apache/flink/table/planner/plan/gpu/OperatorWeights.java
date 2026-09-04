@@ -101,7 +101,11 @@ public final class OperatorWeights {
                     Map.entry("ATAN2", 24),
                     Map.entry("SINH", 24),
                     Map.entry("COSH", 24),
-                    Map.entry("TANH", 24));
+                    Map.entry("TANH", 24),
+                    // One comparison and a select. An n-ary LEAST folds into n-1 of them, but the
+                    // operands it is comparing dominate the cost by orders of magnitude.
+                    Map.entry("LEAST", 1),
+                    Map.entry("GREATEST", 1));
 
     private OperatorWeights() {}
 

@@ -308,6 +308,22 @@ public final class GpuKernelGenerator {
     /** Maps a named SQL function onto {@code TornadoMath}, which is what compiles to the device. */
     private static @Nullable String renderFunction(RexCall call, List<String> operands) {
         String name = call.getOperator().getName().toUpperCase(Locale.ROOT);
+
+        // LEAST and GREATEST take any number of arguments; TornadoMath.min and max take two. Fold
+        // left, so LEAST(a, b, c) becomes min(min(a, b), c). Kept out of the switch below because
+        // that one pairs a name with a fixed arity.
+        if ("LEAST".equals(name) || "GREATEST".equals(name)) {
+            if (operands.size() < 2 || !isDoubleResult(call)) {
+                return null;
+            }
+            String reduce = "LEAST".equals(name) ? "min" : "max";
+            String folded = operands.get(0);
+            for (int i = 1; i < operands.size(); i++) {
+                folded = "TornadoMath." + reduce + "(" + folded + ", " + operands.get(i) + ")";
+            }
+            return folded;
+        }
+
         String fn;
         int arity = 1;
         switch (name) {

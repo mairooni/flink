@@ -24,7 +24,12 @@ import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.SqlFunction;
+import org.apache.calcite.sql.SqlFunctionCategory;
+import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.sql.type.OperandTypes;
+import org.apache.calcite.sql.type.ReturnTypes;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -45,6 +50,22 @@ class GpuKernelGeneratorTest {
 
     private final RelDataTypeFactory types = new JavaTypeFactoryImpl();
     private final RexBuilder rex = new RexBuilder(types);
+
+    /**
+     * Stands in for Flink's {@code LEAST}, which is a {@code BuiltInFunctionDefinition} reached
+     * through a bridging operator rather than anything in Calcite's standard table. The generator
+     * dispatches on the operator's name, so a plain function of the same name exercises the same
+     * path without dragging the bridging machinery into a unit test.
+     */
+    private static SqlFunction named(String name) {
+        return new SqlFunction(
+                name,
+                SqlKind.OTHER_FUNCTION,
+                ReturnTypes.ARG0,
+                null,
+                OperandTypes.VARIADIC,
+                SqlFunctionCategory.NUMERIC);
+    }
 
     private RexNode col(int index) {
         return rex.makeInputRef(types.createSqlType(SqlTypeName.DOUBLE), index);
@@ -80,6 +101,30 @@ class GpuKernelGeneratorTest {
         assertTrue(kernel.hasFilter());
         assertTrue(kernel.source().contains("out0.set(i, ((c1 * 2.0) + 1.0));"), kernel.source());
         assertTrue(kernel.source().contains("if ((c1 > 0.5))"), kernel.source());
+    }
+
+    @Test
+    @DisplayName("LEAST folds into nested binary minima")
+    void leastFoldsLeft() {
+        // LEAST(c0, c1, 2.0) -- n-ary in SQL, and TornadoMath.min takes two
+        RexNode expr = rex.makeCall(named("LEAST"), Arrays.asList(col(0), col(1), lit(2.0)));
+
+        GpuKernelSource kernel = generate(Collections.singletonList(expr), null);
+
+        assertTrue(
+                kernel.source()
+                        .contains("out0.set(i, TornadoMath.min(TornadoMath.min(c0, c1), 2.0));"),
+                kernel.source());
+    }
+
+    @Test
+    @DisplayName("GREATEST folds the same way, onto max")
+    void greatestFoldsLeft() {
+        RexNode expr = rex.makeCall(named("GREATEST"), Arrays.asList(col(0), col(1)));
+
+        GpuKernelSource kernel = generate(Collections.singletonList(expr), null);
+
+        assertTrue(kernel.source().contains("TornadoMath.max(c0, c1)"), kernel.source());
     }
 
     @Test
