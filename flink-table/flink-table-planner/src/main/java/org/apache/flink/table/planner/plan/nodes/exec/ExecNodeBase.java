@@ -87,6 +87,8 @@ public abstract class ExecNodeBase<T> implements ExecNode<T> {
 
     private @Nullable transient GpuOffloadAssignment gpuOffloadAssignment;
 
+    private transient double estimatedRowCount = UNKNOWN_ROW_COUNT;
+
     /** Holds the context information (id, name, version) as deserialized from a JSON plan. */
     @JsonProperty(value = FIELD_NAME_TYPE, access = JsonProperty.Access.WRITE_ONLY)
     private final ExecNodeContext context;
@@ -308,6 +310,16 @@ public abstract class ExecNodeBase<T> implements ExecNode<T> {
     @Override
     public boolean supportFusionCodegen() {
         return false;
+    }
+
+    @Override
+    public void setEstimatedRowCount(double rowCount) {
+        this.estimatedRowCount = rowCount;
+    }
+
+    @Override
+    public double getEstimatedRowCount() {
+        return estimatedRowCount;
     }
 
     @Override

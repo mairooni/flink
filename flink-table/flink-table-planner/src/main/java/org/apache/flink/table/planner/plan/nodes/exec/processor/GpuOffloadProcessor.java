@@ -25,6 +25,7 @@ import org.apache.flink.table.planner.plan.gpu.GpuOffloadOptions;
 import org.apache.flink.table.planner.plan.gpu.RowCost;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNode;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeGraph;
+import org.apache.flink.table.planner.plan.nodes.exec.GpuOffloadExecNode;
 import org.apache.flink.table.planner.plan.nodes.exec.visitor.AbstractExecNodeExactlyOnceVisitor;
 
 import java.util.ArrayList;
@@ -74,7 +75,9 @@ public class GpuOffloadProcessor implements ExecNodeGraphProcessor {
             return execGraph;
         }
         GpuOffloadDecision decision =
-                new GpuOffloadDecision(config.get(GpuOffloadOptions.MIN_ROW_COST));
+                new GpuOffloadDecision(
+                        config.get(GpuOffloadOptions.MIN_ROW_COST),
+                        config.get(GpuOffloadOptions.MIN_TOTAL_WORK));
 
         List<ExecNode<?>> order = topologicalOrder(execGraph);
         Map<ExecNode<?>, Integer> consumerCount = countConsumers(order);
@@ -96,7 +99,9 @@ public class GpuOffloadProcessor implements ExecNodeGraphProcessor {
                 assign(
                         node,
                         new GpuOffloadAssignment(
-                                NO_GROUP, decision.forSubtree(Collections.singletonList(cost))));
+                                NO_GROUP,
+                                decision.forSubtree(
+                                        Collections.singletonList(cost), rowCountOf(node))));
                 continue;
             }
             costs.put(node, cost);
@@ -127,7 +132,8 @@ public class GpuOffloadProcessor implements ExecNodeGraphProcessor {
             for (ExecNode<?> member : entry.getValue()) {
                 memberCosts.add(costs.get(member));
             }
-            GpuOffloadDecision.Verdict verdict = decision.forSubtree(memberCosts);
+            GpuOffloadDecision.Verdict verdict =
+                    decision.forSubtree(memberCosts, rowCountOf(entry.getValue()));
             for (ExecNode<?> member : entry.getValue()) {
                 assign(member, new GpuOffloadAssignment(entry.getKey(), verdict));
             }
@@ -152,6 +158,31 @@ public class GpuOffloadProcessor implements ExecNodeGraphProcessor {
         }
         groups.remove(b);
         return a;
+    }
+
+    /**
+     * Rows the subtree will see, taken as the largest estimate among its members.
+     *
+     * <p>Members of one group run as a single kernel over the same batches, and a filter can only
+     * narrow what follows it, so the widest member is what the kernel is actually sized against.
+     * Unknown wins over any number: a group holding one node the planner could not estimate is a
+     * group whose total work is not known, and guessing there would be worse than skipping the
+     * gate.
+     */
+    private static double rowCountOf(List<ExecNode<?>> members) {
+        double widest = 0.0;
+        for (ExecNode<?> member : members) {
+            double rows = rowCountOf(member);
+            if (rows == GpuOffloadExecNode.UNKNOWN_ROW_COUNT) {
+                return GpuOffloadExecNode.UNKNOWN_ROW_COUNT;
+            }
+            widest = Math.max(widest, rows);
+        }
+        return widest;
+    }
+
+    private static double rowCountOf(ExecNode<?> node) {
+        return node.getEstimatedRowCount();
     }
 
     private static void assign(ExecNode<?> node, GpuOffloadAssignment assignment) {

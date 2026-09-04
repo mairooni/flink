@@ -65,6 +65,56 @@ class GpuOffloadDecisionTest {
         assertTrue(v.reason().contains("below cost floor"), v::reason);
     }
 
+    /** SQRT(SQRT(...)) nested deeply enough to clear the per-row floor on its own. */
+    private RexNode heavy() {
+        RexNode expr = val();
+        for (int i = 0; i < 20; i++) {
+            expr = rex.makeCall(SqlStdOperatorTable.SQRT, expr);
+        }
+        return expr;
+    }
+
+    @Test
+    @DisplayName("a heavy expression over too few rows is refused, however heavy")
+    void tooFewRowsToRepayCompilation() {
+        GpuOffloadDecision.Verdict v =
+                GpuOffloadDecision.withDefaults().decide(List.of(heavy()), 100);
+
+        assertFalse(v.offload(), "clearing the per-row floor says nothing about a 100-row table");
+        assertTrue(v.reason().contains("below total-work floor"), v::reason);
+    }
+
+    @Test
+    @DisplayName("the same expression over enough rows is accepted")
+    void enoughRowsToRepayCompilation() {
+        GpuOffloadDecision.Verdict v =
+                GpuOffloadDecision.withDefaults().decide(List.of(heavy()), 10_000_000);
+
+        assertTrue(v.offload(), v::reason);
+        assertTrue(v.reason().contains("weighted ops against a floor"), v::reason);
+    }
+
+    @Test
+    @DisplayName("an unknown row count skips the total-work floor rather than guessing")
+    void unknownRowCountSkipsTheSecondGate() {
+        GpuOffloadDecision.Verdict v = GpuOffloadDecision.withDefaults().decide(List.of(heavy()));
+
+        assertTrue(v.offload(), v::reason);
+        assertTrue(v.reason().contains("row count unknown"), v::reason);
+    }
+
+    @Test
+    @DisplayName("the per-row floor still rejects first: a cheap expression over many rows")
+    void perRowFloorIsNotBoughtOffByVolume() {
+        RexNode cheap = rex.makeCall(SqlStdOperatorTable.MULTIPLY, val(), lit(2.0));
+
+        GpuOffloadDecision.Verdict v =
+                GpuOffloadDecision.withDefaults().decide(List.of(cheap), 1_000_000_000L);
+
+        assertFalse(v.offload(), "a billion rows does not make a 1-flop expression worth staging");
+        assertTrue(v.reason().contains("below cost floor"), v::reason);
+    }
+
     @Test
     @DisplayName("an unambiguously heavy expression is accepted")
     void acceptsHeavyWork() {

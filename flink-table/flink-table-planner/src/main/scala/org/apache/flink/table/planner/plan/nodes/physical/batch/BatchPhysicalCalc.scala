@@ -51,12 +51,17 @@ class BatchPhysicalCalc(
       null
     }
 
-    new BatchExecCalc(
+    val execNode = new BatchExecCalc(
       unwrapTableConfig(this),
       projection,
       condition,
       InputProperty.DEFAULT,
       FlinkTypeFactory.toLogicalRowType(getRowType),
       getRelDetailedDescription)
+    // Carry the planner's cardinality estimate across into the ExecNode graph. GPU offload needs
+    // it to tell a heavy expression that is worth offloading from one that is worth offloading
+    // over enough rows, and an ExecNode has no metadata query to ask once translation is done.
+    execNode.setEstimatedRowCount(getCluster.getMetadataQuery.getRowCount(this))
+    execNode
   }
 }

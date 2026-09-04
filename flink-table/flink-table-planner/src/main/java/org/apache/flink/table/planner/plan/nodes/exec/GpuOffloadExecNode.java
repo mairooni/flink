@@ -40,6 +40,29 @@ import javax.annotation.Nullable;
  */
 public interface GpuOffloadExecNode {
 
+    /** Row count is not known: the node was built without one, or the planner had no estimate. */
+    double UNKNOWN_ROW_COUNT = -1.0;
+
+    /**
+     * The planner's estimate of how many rows this node will see.
+     *
+     * <p>Needed because a per-row cost cannot answer whether offloading pays. Staging buffers,
+     * javac, and the device's own compilation are paid once per task whatever the row count, so an
+     * expression heavy enough to win on every row still loses over a short input. Captured when the
+     * physical node is translated, since an {@link ExecNode} has no metadata query of its own.
+     */
+    default void setEstimatedRowCount(double rowCount) {
+        // Discarded by default, like the assignment below: a node that cannot be offloaded is
+        // never costed, so there is nothing to remember.
+    }
+
+    /**
+     * @return the estimate, or {@link #UNKNOWN_ROW_COUNT} when none was captured
+     */
+    default double getEstimatedRowCount() {
+        return UNKNOWN_ROW_COUNT;
+    }
+
     /**
      * Whether this ExecNode's work is expressible as a device kernel at all.
      *

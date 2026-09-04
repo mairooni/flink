@@ -40,6 +40,20 @@ public class GpuOffloadOptions {
                                     + GpuOffloadDecision.MIN_ROW_COST_KEY
                                     + " are executed on a GPU. Off by default.");
 
+    public static final ConfigOption<Long> MIN_TOTAL_WORK =
+            ConfigOptions.key(GpuOffloadDecision.MIN_TOTAL_WORK_KEY)
+                    .longType()
+                    .defaultValue(GpuOffloadDecision.DEFAULT_MIN_TOTAL_WORK)
+                    .withDescription(
+                            "Minimum total work, in weighted operations across all rows, before a "
+                                    + "subtree is offloaded. The per-row floor asks whether the "
+                                    + "device is faster on each row; this asks whether there are "
+                                    + "enough rows to repay what offloading costs once per task -- "
+                                    + "compiling the kernel with javac, compiling it again for the "
+                                    + "device, and allocating the staging buffers. A heavy "
+                                    + "expression over a short input clears the first gate and "
+                                    + "still loses.");
+
     public static final ConfigOption<Integer> MIN_ROW_COST =
             ConfigOptions.key(GpuOffloadDecision.MIN_ROW_COST_KEY)
                     .intType()

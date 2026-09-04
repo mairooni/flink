@@ -18,6 +18,8 @@
 
 package org.apache.flink.table.planner.plan.gpu;
 
+import org.apache.flink.table.planner.plan.nodes.exec.GpuOffloadExecNode;
+
 import org.apache.calcite.rex.RexNode;
 
 import java.util.List;
@@ -75,18 +77,48 @@ public final class GpuOffloadDecision {
      */
     public static final int MEASURED_BREAK_EVEN = 70;
 
+    /** Second gate: total work across all rows. See {@link #DEFAULT_MIN_TOTAL_WORK}. */
+    public static final String MIN_TOTAL_WORK_KEY = "table.exec.gpu-offload.min-total-work";
+
+    /**
+     * Roughly ten million weighted operations, derived from the end-to-end benchmark rather than
+     * guessed.
+     *
+     * <p>Measured on an RTX 4070 Laptop: 2M rows of a 3458 weighted-op expression took 14.4 s on
+     * the CPU and 121 ms of kernel time, so the device does about 5.7e10 weighted ops/s against the
+     * CPU's 4.8e8 -- 119x. Offloading also costs about 20 ms per task before any row is processed,
+     * nearly all of it compiling the kernel twice, once with javac and once for the device. Setting
+     * work/cpu_rate equal to that fixed cost plus work/gpu_rate puts break-even near 1e7 weighted
+     * operations: about 100k rows of a floor-weight expression, or 2.8k rows of the benchmark's.
+     *
+     * <p>Like the per-row floor this is device-specific, and it is a floor rather than a target:
+     * clearing it means offloading should not lose, not that anyone will notice it winning.
+     */
+    public static final long DEFAULT_MIN_TOTAL_WORK = 10_000_000L;
+
     private final int minRowCost;
 
+    private final long minTotalWork;
+
     public GpuOffloadDecision(int minRowCost) {
+        this(minRowCost, DEFAULT_MIN_TOTAL_WORK);
+    }
+
+    public GpuOffloadDecision(int minRowCost, long minTotalWork) {
         if (minRowCost < 0) {
             throw new IllegalArgumentException(
                     "min-row-cost must be non-negative, was " + minRowCost);
         }
+        if (minTotalWork < 0) {
+            throw new IllegalArgumentException(
+                    "min-total-work must be non-negative, was " + minTotalWork);
+        }
         this.minRowCost = minRowCost;
+        this.minTotalWork = minTotalWork;
     }
 
     public static GpuOffloadDecision withDefaults() {
-        return new GpuOffloadDecision(DEFAULT_MIN_ROW_COST);
+        return new GpuOffloadDecision(DEFAULT_MIN_ROW_COST, DEFAULT_MIN_TOTAL_WORK);
     }
 
     /**
@@ -133,8 +165,13 @@ public final class GpuOffloadDecision {
      * say no most of the time.
      */
     public Verdict decide(List<? extends RexNode> expressions) {
+        return decide(expressions, GpuOffloadExecNode.UNKNOWN_ROW_COUNT);
+    }
+
+    /** As {@link #decide(List)}, with the planner's row-count estimate for the node. */
+    public Verdict decide(List<? extends RexNode> expressions, double rowCount) {
         RowCost cost = GpuCostEstimator.estimateAll(expressions);
-        return verdict(cost);
+        return verdict(cost, rowCount);
     }
 
     /**
@@ -146,11 +183,16 @@ public final class GpuOffloadDecision {
      * one per node — is about transfer count.
      */
     public Verdict forSubtree(List<RowCost> nodeCosts) {
+        return forSubtree(nodeCosts, GpuOffloadExecNode.UNKNOWN_ROW_COUNT);
+    }
+
+    /** As {@link #forSubtree(List)}, with the planner's row-count estimate for the subtree. */
+    public Verdict forSubtree(List<RowCost> nodeCosts, double rowCount) {
         RowCost total = RowCost.ZERO;
         for (RowCost cost : nodeCosts) {
             total = total.plus(cost);
         }
-        return verdict(total);
+        return verdict(total, rowCount);
     }
 
     /**
@@ -161,7 +203,7 @@ public final class GpuOffloadDecision {
         return new Verdict(false, selected.rowCost(), "selected but fell back: " + reason);
     }
 
-    private Verdict verdict(RowCost cost) {
+    private Verdict verdict(RowCost cost, double rowCount) {
         if (!cost.isEligible()) {
             return new Verdict(false, 0, "not expressible on device: " + cost.rejection());
         }
@@ -174,9 +216,35 @@ public final class GpuOffloadDecision {
                                     + "faster than the staging and transfer this would add",
                             cost.weight(), minRowCost));
         }
+        // Second gate. The floor above says the device wins on each row; this says there are
+        // enough rows for that to repay what offloading costs once per task. An unknown row count
+        // skips it rather than guessing -- refusing on no evidence would silently disable offload
+        // wherever the planner has no estimate.
+        if (rowCount != GpuOffloadExecNode.UNKNOWN_ROW_COUNT && rowCount >= 0) {
+            double totalWork = rowCount * cost.weight();
+            if (totalWork < minTotalWork) {
+                return new Verdict(
+                        false,
+                        cost.weight(),
+                        String.format(
+                                "below total-work floor: %.0f rows x %d weighted ops/row = %.3g < "
+                                        + "%d; too few rows to repay compiling the kernel",
+                                rowCount, cost.weight(), totalWork, minTotalWork));
+            }
+            return new Verdict(
+                    true,
+                    cost.weight(),
+                    String.format(
+                            "%d weighted ops/row clears floor of %d, and %.0f rows give %.3g "
+                                    + "weighted ops against a floor of %d",
+                            cost.weight(), minRowCost, rowCount, totalWork, minTotalWork));
+        }
         return new Verdict(
                 true,
                 cost.weight(),
-                String.format("%d weighted ops/row clears floor of %d", cost.weight(), minRowCost));
+                String.format(
+                        "%d weighted ops/row clears floor of %d; row count unknown, so the "
+                                + "total-work floor was not applied",
+                        cost.weight(), minRowCost));
     }
 }
