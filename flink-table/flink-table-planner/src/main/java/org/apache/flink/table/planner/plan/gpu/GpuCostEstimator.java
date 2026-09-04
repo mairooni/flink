@@ -162,6 +162,19 @@ public final class GpuCostEstimator implements RexVisitor<RowCost> {
 
         RowCost total = RowCost.of(weight);
         for (RexNode operand : call.getOperands()) {
+            // BIGINT is admitted as a column but refused as an operand, matching what the
+            // generator will accept. Staging is DoubleArray, and a long beyond 2^53 does not
+            // survive that round trip, so an expression over one would quietly disagree with the
+            // CPU plan for large keys. Projecting such a column through is still fine: it never
+            // reaches the device. Costing it here as eligible and having generation refuse it
+            // later showed up in EXPLAIN as an unexplained fallback.
+            if (operand.getType().getSqlTypeName() == SqlTypeName.BIGINT) {
+                return RowCost.ineligible(
+                        "BIGINT operand of "
+                                + call.getOperator().getName()
+                                + ": values beyond 2^53 would not survive the double staging "
+                                + "buffers, so the device could disagree with the CPU plan");
+            }
             total = total.plus(operand.accept(this));
             if (!total.isEligible()) {
                 return total;

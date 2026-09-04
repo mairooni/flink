@@ -57,6 +57,27 @@ class GpuCostEstimatorTest {
     }
 
     @Test
+    @DisplayName("a BIGINT operand is refused, matching what the generator will accept")
+    void bigintOperandIsRefused() {
+        // The staging buffers are DoubleArray, so a long beyond 2^53 would come back changed.
+        RexNode expr =
+                rex.makeCall(SqlStdOperatorTable.MULTIPLY, col(SqlTypeName.BIGINT, 0), lit(2.0));
+
+        RowCost cost = GpuCostEstimator.estimate(expr);
+
+        assertFalse(cost.isEligible(), "estimator and generator must agree about BIGINT");
+        assertTrue(cost.rejection().contains("BIGINT operand"), cost::rejection);
+    }
+
+    @Test
+    @DisplayName("a BIGINT column projected through is still fine: it never reaches the device")
+    void bigintPassThroughIsAllowed() {
+        RowCost cost = GpuCostEstimator.estimate(col(SqlTypeName.BIGINT, 0));
+
+        assertTrue(cost.isEligible(), "a projected-through column keeps its exact type");
+    }
+
+    @Test
     @DisplayName("the original target query is eligible but far below any plausible floor")
     void targetQueryIsCheap() {
         RexNode val = col(SqlTypeName.DOUBLE, 1);
