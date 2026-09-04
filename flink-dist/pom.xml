@@ -219,6 +219,15 @@ under the License.
 			<scope>provided</scope>
 		</dependency>
 
+		<!-- Ships to opt/, not lib/. Declared here only so the reactor builds it before the
+		     assembly copies its jar; see src/main/assemblies/opt.xml. -->
+		<dependency>
+			<groupId>org.apache.flink</groupId>
+			<artifactId>flink-table-gpu-runtime</artifactId>
+			<version>${project.version}</version>
+			<scope>provided</scope>
+		</dependency>
+
 		<!-- SQL Client and planner with scala version goes in the /opt folder -->
 
 		<dependency>

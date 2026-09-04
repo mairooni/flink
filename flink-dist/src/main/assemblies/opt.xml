@@ -37,6 +37,18 @@
 			<destName>flink-table-planner_${scala.binary.version}-${project.version}.jar</destName>
 			<fileMode>0644</fileMode>
 		</file>
+		<!--
+			GPU offload runtime. Optional, and in opt/ rather than lib/ deliberately: it needs a JVM
+			launched with TornadoVM's flags (preview features plus the module path), so it must not
+			be on every TaskManager's classpath by default. Copy it into lib/ to enable the feature;
+			flink-table-gpu-runtime/scripts/gpu-cluster-setup.sh does that.
+		-->
+		<file>
+			<source>../flink-table/flink-table-gpu-runtime/target/flink-table-gpu-runtime-${project.version}.jar</source>
+			<outputDirectory>opt/</outputDirectory>
+			<destName>flink-table-gpu-runtime-${project.version}.jar</destName>
+			<fileMode>0644</fileMode>
+		</file>
 		<file>
 			<source>../flink-table/flink-sql-client/target/flink-sql-client-${project.version}.jar</source>
 			<outputDirectory>opt/</outputDirectory>

@@ -11,12 +11,11 @@ and a cluster without this jar simply runs everything on the CPU.
 
 | | |
 |---|---|
-| `kernels/` | javac-compiled TornadoVM kernels. Must be javac-compiled: TornadoVM resolves a kernel from its method reference's `SerializedLambda`, so a runtime-generated class cannot be used |
 | `gather/` | staging strategies per input layout — columnar bulk copy, binary row transpose, generic accessors |
-| `operator/` | `FilterProjectEngine` (buffers plus task graph) and `GpuCalcOperator` (the Flink operator) |
+| `operator/` | `GeneratedKernelEngine` (javac, buffers, task graph) and `GpuCalcOperator` (the Flink operator) |
 | `provider/` | the `ServiceLoader` entry point |
 | `metrics/` | the gather / copy-in / kernel / copy-out breakdown |
-| `Harness` | standalone benchmark, no Flink job — used to calibrate the cost floor |
+| `GeneratedKernelSweep` | standalone benchmark, no Flink job — arithmetic-intensity sweep against the cost floor |
 
 ## Building
 
@@ -51,8 +50,38 @@ level 11: TornadoVM's off-heap array types are built on `java.lang.foreign`, a p
 
 ## Running
 
-TornadoVM's JVM arguments must reach the TaskManagers, via `env.java.opts` in `flink-conf.yaml` or
-as VM options in an IDE. The shipped `tornado-argfile` carries them.
+TornadoVM's JVM arguments must reach every JVM that touches the plan -- the client builds it, the
+JobManager holds it, the TaskManager runs the kernel -- via `env.java.opts` in `conf/config.yaml`
+or as VM options in an IDE. The SDK's `tornado-argfile.template` carries them; expand
+`${TORNADOVM_HOME}` in it rather than copying the flags by hand, since it is generated from
+`tornado --printJavaFlags` and stays correct across TornadoVM versions.
 
-See `flink-examples/flink-examples-table/.../java/gpu/GpuOffloadExample.java`, and `FINDINGS.md`
-for the measurements behind the cost floor.
+From an IDE, see `flink-examples/flink-examples-table/.../java/gpu/GpuOffloadExample.java`. It is a
+correctness demonstration, not a performance one: its expression is two flops and it forces the
+cost floor down to admit it.
+
+### Benchmark on a standalone cluster
+
+`GpuOffloadExample` runs in a MiniCluster, which hides everything deployment does -- per-subtask
+kernel compilation, device contention, the client round trip. For numbers that reflect what a user
+sees, `scripts/` drives a real cluster:
+
+```bash
+export TORNADOVM_HOME=/path/to/tornadovm-sdk
+DIST=build-target                       # or flink-dist/target/flink-<version>-bin/flink-<version>
+
+scripts/gpu-cluster-setup.sh "$DIST"    # gpu-runtime opt/ -> lib/, TornadoVM flags into config.yaml
+scripts/run-haversine.sh    "$DIST" 50000000 1 10
+```
+
+`run-haversine.sh` starts the cluster, writes the input to Parquet once if it is not already
+there, then runs the query ten times with offload off and ten times with it on, through
+`bin/flink run` exactly as a user would.
+
+Two choices in there are not incidental. The source is **Parquet, not `datagen`**: generating rows
+costs about 100 us each, which buries the operator whatever the kernel does, and Parquet also hands
+the operator `ColumnarRowData`, the layout the columnar gather exists for. The expression is
+**haversine**, which the estimator weighs well above the default floor -- unlike `val * 2.0 + 1.0`,
+which is below it and has nothing for the GPU to win back.
+
+`FINDINGS.md` has the measurements behind the cost floor.

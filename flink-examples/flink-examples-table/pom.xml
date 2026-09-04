@@ -94,6 +94,13 @@ under the License.
 			<artifactId>flink-connector-files</artifactId>
 			<version>${project.version}</version>
 		</dependency>
+		<!-- Parquet gives the benchmark a columnar source, which keeps row generation off the
+		     critical path and hands the operator ColumnarRowData. -->
+		<dependency>
+			<groupId>org.apache.flink</groupId>
+			<artifactId>flink-parquet</artifactId>
+			<version>${project.version}</version>
+		</dependency>
 		<dependency>
 			<groupId>org.apache.flink</groupId>
 			<artifactId>flink-csv</artifactId>
@@ -340,6 +347,30 @@ under the License.
 					</execution>
 
 					<execution>
+						<id>HaversineBenchmark</id>
+						<phase>package</phase>
+						<goals>
+							<goal>jar</goal>
+						</goals>
+
+						<configuration>
+							<classifier>HaversineBenchmark</classifier>
+
+							<archive>
+								<manifestEntries>
+									<program-class>org.apache.flink.table.examples.java.gpu.HaversineBenchmark</program-class>
+								</manifestEntries>
+							</archive>
+
+							<includes>
+								<include>org/apache/flink/table/examples/java/gpu/HaversineBenchmark*</include>
+								<include>META-INF/LICENSE</include>
+								<include>META-INF/NOTICE</include>
+							</includes>
+						</configuration>
+					</execution>
+
+					<execution>
 						<id>AdvancedFunctionsExample</id>
 						<phase>package</phase>
 						<goals>
@@ -381,6 +412,7 @@ under the License.
 								<copy file="${project.basedir}/target/flink-examples-table_${scala.binary.version}-${project.version}-WordCountSQLExample.jar" tofile="${project.basedir}/target/WordCountSQLExample.jar"/>
 								<copy file="${project.basedir}/target/flink-examples-table_${scala.binary.version}-${project.version}-ChangelogSocketExample.jar" tofile="${project.basedir}/target/ChangelogSocketExample.jar"/>
 								<copy file="${project.basedir}/target/flink-examples-table_${scala.binary.version}-${project.version}-AdvancedFunctionsExample.jar" tofile="${project.basedir}/target/AdvancedFunctionsExample.jar"/>
+								<copy file="${project.basedir}/target/flink-examples-table_${scala.binary.version}-${project.version}-HaversineBenchmark.jar" tofile="${project.basedir}/target/HaversineBenchmark.jar"/>
 							</target>
 						</configuration>
 					</execution>
