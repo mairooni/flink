@@ -63,7 +63,9 @@ under the License.
 			<scope>provided</scope>
 		</dependency>
 		<!--
-			TornadoVM. Install from a TornadoVM distribution before building this module.
+			TornadoVM. Not on Maven Central, so build a TornadoVM distribution first: its own
+			build installs these into the local repository under the coordinates used here.
+			No manual install:install-file step is needed.
 
 			Changing this version requires a clean build of this module, not an incremental one.
 			TornadoVM resolves a kernel from its method reference's SerializedLambda, so the
@@ -71,22 +73,15 @@ under the License.
 			time against a specific tornado-api. Maven will not recompile unchanged sources for a
 			dependency version bump, and the stale classes then fail at run time with
 			"Kernel entry ... has no writeReplace()".
-
-			  D=$TORNADO_SDK/share/java/tornado
-			  for a in tornado-api tornado-annotation; do
-			    mvn install:install-file -Dfile=$D/$a-5.2.1-jdk21-dev.jar \
-			      -DgroupId=uk.ac.manchester.tornado -DartifactId=$a \
-			      -Dversion=5.2.1-jdk21-dev -Dpackaging=jar
-			  done
 		-->
 		<dependency>
-			<groupId>uk.ac.manchester.tornado</groupId>
+			<groupId>io.github.beehive-lab</groupId>
 			<artifactId>tornado-api</artifactId>
 			<version>${tornado.version}</version>
 			<scope>provided</scope>
 		</dependency>
 		<dependency>
-			<groupId>uk.ac.manchester.tornado</groupId>
+			<groupId>io.github.beehive-lab</groupId>
 			<artifactId>tornado-annotation</artifactId>
 			<version>${tornado.version}</version>
 			<scope>provided</scope>
