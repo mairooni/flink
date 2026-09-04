@@ -55,12 +55,16 @@ import org.apache.flink.util.CloseableIterator;
  * <h2>Usage</h2>
  *
  * <pre>
- *   # once: write the input table
- *   flink run -c ...HaversineBenchmark job.jar --generate --rows 50000000 --data /path/points
+ *   # once: write the input table (about three minutes for 2M rows -- datagen is the slow part)
+ *   flink run examples/table/HaversineBenchmark.jar --generate --rows 2000000 --data /tmp/points
  *
  *   # then: measure
- *   flink run -c ...HaversineBenchmark job.jar --data /path/points --gpu true
+ *   flink run examples/table/HaversineBenchmark.jar --data /tmp/points --depots 20 --gpu true
  * </pre>
+ *
+ * <p>Or let {@code scripts/run-haversine.sh} in {@code flink-table-gpu-runtime} do all of it, which
+ * is the supported path: it starts the cluster, generates the input if it is missing, and runs both
+ * sides.
  */
 public final class HaversineBenchmark {
 
@@ -270,7 +274,7 @@ public final class HaversineBenchmark {
     /** Command line, in the shape the run scripts use. */
     private static final class Args {
         private String data = "/tmp/flink-gpu-points";
-        private int rows = 50_000_000;
+        private int rows = 2_000_000;
         private int parallelism = -1;
         private int runs = 10;
         private String format = "csv";

@@ -67,12 +67,22 @@ kernel compilation, device contention, the client round trip. For numbers that r
 sees, `scripts/` drives a real cluster:
 
 ```bash
-export TORNADOVM_HOME=/path/to/tornadovm-sdk
-DIST=build-target                       # or flink-dist/target/flink-<version>-bin/flink-<version>
+# build, once
+./mvnw clean install -DskipTests -Djdk21 -Pjava21-target
 
-scripts/gpu-cluster-setup.sh "$DIST"    # gpu-runtime opt/ -> lib/, TornadoVM flags into config.yaml
-scripts/run-haversine.sh    "$DIST" 50000000 1 10
+export TORNADOVM_HOME=/path/to/tornadovm-sdk
+DIST=$PWD/flink-dist/target/flink-2.3.0-bin/flink-2.3.0
+
+flink-table/flink-table-gpu-runtime/scripts/gpu-cluster-setup.sh "$DIST"
+flink-table/flink-table-gpu-runtime/scripts/run-haversine.sh    "$DIST" 2000000 1 10
+#                                                                       rows  par runs
 ```
+
+**There is no input file to fetch.** The first run generates it -- 2M rows into
+`/tmp/flink-gpu-points-2000000-csv`, about three minutes, since `datagen` is the slow part at
+roughly 100 us/row -- and later runs reuse it. Set `DATA` to put it elsewhere, `DEPOTS` to change
+the number of reference points, `FORMAT=parquet` if Hadoop is on the cluster classpath. The 2M rows
+are about 90 MB as CSV, which is why the file is generated rather than checked in.
 
 `run-haversine.sh` starts the cluster, writes the input once if it is not already there, then runs
 the query ten times with offload off and ten times with it on, through `bin/flink run` exactly as a

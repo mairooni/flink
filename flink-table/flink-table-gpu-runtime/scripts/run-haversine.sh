@@ -34,7 +34,9 @@
 set -euo pipefail
 
 FLINK_HOME="${1:-}"
-ROWS="${2:-50000000}"
+# 2M rows takes about three minutes to generate and is enough to show the effect.
+# Generation runs through datagen at roughly 100 us/row, so 50M would take over an hour.
+ROWS="${2:-2000000}"
 PARALLELISM="${3:-1}"
 RUNS="${4:-10}"
 DEPOTS="${DEPOTS:-20}"
